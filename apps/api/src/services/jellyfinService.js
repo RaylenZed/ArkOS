@@ -10,6 +10,10 @@ function getJellyfinConfig() {
   };
 }
 
+function isConfigured(cfg) {
+  return Boolean(cfg.baseUrl && cfg.apiKey && cfg.userId);
+}
+
 function ensureConfigured() {
   const cfg = getJellyfinConfig();
   if (!cfg.baseUrl || !cfg.apiKey) {
@@ -99,6 +103,22 @@ export async function refreshLibrary() {
 }
 
 export async function getMediaSummary() {
+  const cfg = getJellyfinConfig();
+  if (!isConfigured(cfg)) {
+    return {
+      configured: false,
+      continueWatching: [],
+      latest: [],
+      sessions: [],
+      summary: {
+        activeSessions: 0,
+        continueCount: 0,
+        latestCount: 0
+      },
+      reason: "Jellyfin 未完成配置（需 baseUrl、API Key、User ID）"
+    };
+  }
+
   const [continueWatching, latest, sessions] = await Promise.all([
     getContinueWatching(8),
     getLatestItems(12),
@@ -106,6 +126,7 @@ export async function getMediaSummary() {
   ]);
 
   return {
+    configured: true,
     continueWatching,
     latest,
     sessions,

@@ -523,10 +523,10 @@ async function runInstall(appId, taskId, options = {}) {
 
   const updates = {};
   if (appId === "jellyfin" && !cfg.jellyfinBaseUrl) {
-    updates.jellyfinBaseUrl = `http://127.0.0.1:${cfg.jellyfinHostPort}`;
+    updates.jellyfinBaseUrl = "http://arknas-jellyfin:8096";
   }
   if (appId === "qbittorrent" && !cfg.qbBaseUrl) {
-    updates.qbBaseUrl = `http://127.0.0.1:${cfg.qbWebPort}`;
+    updates.qbBaseUrl = `http://arknas-qbittorrent:${cfg.qbWebPort}`;
   }
   if (Object.keys(updates).length > 0) {
     updateAppTask(taskId, { progress: 92, message: "同步集成配置" });

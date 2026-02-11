@@ -76,7 +76,7 @@ make up
 ```
 
 ### 4) 访问
-- Web: `http://<服务器IP>:24443`
+- Web: `http://<服务器IP>:24443`（建议公网改为 `https://<域名>:端口`）
 - API Health: `http://<服务器IP>:24443/api/health`
 
 默认登录：
@@ -106,16 +106,23 @@ make up
 - `QBIT_BASE_URL / QBIT_USERNAME / QBIT_PASSWORD`：不是全局必填。
 - 仅当你要使用“下载管理”页面的数据拉取与任务操作时必填。
 - 若你通过“应用中心”安装 Jellyfin/qBittorrent，系统会自动写入部分默认地址，但鉴权项（Jellyfin API Key、qB 密码）仍建议在“设置”里补全。
+- 当前默认值：
+  `JELLYFIN_BASE_URL=http://arknas-jellyfin:8096`
+  `QBIT_BASE_URL=http://arknas-qbittorrent:18080`
+  `QBIT_USERNAME=admin`
+  `QBIT_PASSWORD=adminadmin`
 
 ## 安全基线
 - 不直接暴露 Docker Socket，默认使用 `docker-socket-proxy`
 - 不依赖 80/443/8080，可用高位端口访问
 - 关键操作有审计日志
 - 建议公网场景叠加 VPN/Zero Trust、WAF、Fail2ban/CrowdSec
+- 浏览器 DevTools 的 Network 面板会显示请求体（即使是 HTTPS）；安全性取决于传输链路是否 HTTPS。
 
 ## 文档
 - 需求说明：`docs/planning/SRS.zh-CN.md`
 - PRD：`docs/planning/PRD.zh-CN.md`
+- 飞牛功能对照清单：`docs/planning/FNOS-Feature-Checklist.zh-CN.md`
 - 公网部署方案：`docs/planning/Deployment-Security.zh-CN.md`
 - 开发 TODO：`docs/process/TODO.md`
 - 开发规范：`docs/process/DEVELOPMENT-WORKFLOW.md`

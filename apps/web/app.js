@@ -413,6 +413,7 @@ async function renderMedia() {
     const cw = data.continueWatching || [];
     const latest = data.latest || [];
     const sessions = data.sessions || [];
+    const notConfigured = data.configured === false;
 
     pageContentEl.innerHTML = `
       <section class="card">
@@ -423,6 +424,7 @@ async function renderMedia() {
             <button id="libraryRefreshBtn" class="btn btn-primary">刷新媒体库</button>
           </div>
         </div>
+        ${notConfigured ? `<div class="text-muted" style="margin-top:8px;">${data.reason || "影视模块未配置，当前展示空数据。请到“设置”补全 Jellyfin 配置。"}</div>` : ""}
       </section>
 
       <section class="grid-3">
@@ -479,6 +481,7 @@ async function renderDownloads() {
       api("/api/downloads/summary"),
       api("/api/downloads/tasks?filter=all")
     ]);
+    const notConfigured = summaryData.configured === false;
 
     pageContentEl.innerHTML = `
       <section class="card">
@@ -490,6 +493,7 @@ async function renderDownloads() {
             <button id="addTorrentBtn" class="btn btn-secondary">上传种子</button>
           </div>
         </div>
+        ${notConfigured ? `<div class="text-muted" style="margin-top:8px;">${summaryData.reason || "下载模块未配置，当前展示空数据。请到“设置”补全 qBittorrent 配置。"}</div>` : ""}
       </section>
 
       <section class="card table-wrap">

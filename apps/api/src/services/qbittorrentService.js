@@ -99,7 +99,27 @@ class QBClient {
 
 const qb = new QBClient();
 
+function isQBConfigured() {
+  const cfg = qb.getConfig();
+  return Boolean(cfg.baseUrl && cfg.username && cfg.password);
+}
+
 export async function getDownloadSummary() {
+  if (!isQBConfigured()) {
+    return {
+      configured: false,
+      transfer: {},
+      summary: {
+        downloading: 0,
+        seeding: 0,
+        completed: 0,
+        dlSpeed: 0,
+        upSpeed: 0
+      },
+      reason: "qBittorrent 未完成配置（需 baseUrl、用户名、密码）"
+    };
+  }
+
   const [transfer, maindata] = await Promise.all([
     qb.request("/api/v2/transfer/info"),
     qb.request("/api/v2/sync/maindata")
@@ -111,6 +131,7 @@ export async function getDownloadSummary() {
   const completed = torrents.filter((t) => t.progress >= 1).length;
 
   return {
+    configured: true,
     transfer,
     summary: {
       downloading,
@@ -123,6 +144,7 @@ export async function getDownloadSummary() {
 }
 
 export async function listTasks(filter = "all") {
+  if (!isQBConfigured()) return [];
   return qb.request("/api/v2/torrents/info", { query: { filter } });
 }
 
@@ -168,6 +190,7 @@ export async function deleteTasks(hashes, deleteFiles = false) {
 }
 
 export async function listRecentCompleted(limit = 20) {
+  if (!isQBConfigured()) return [];
   const tasks = await listTasks("completed");
   return tasks
     .slice()
