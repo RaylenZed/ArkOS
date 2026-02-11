@@ -91,6 +91,7 @@ make up
 - 公网部署方案：`docs/planning/Deployment-Security.zh-CN.md`
 - 开发 TODO：`docs/process/TODO.md`
 - 开发规范：`docs/process/DEVELOPMENT-WORKFLOW.md`
+- 发布与回滚：`docs/process/RELEASE-RUNBOOK.md`
 
 ## 命令
 ```bash
@@ -99,6 +100,23 @@ make down      # 停止
 make restart   # 重建重启
 make ps        # 查看服务状态
 make logs      # 跟踪日志
+make backup    # 执行备份
+make restore BACKUP=./backups/<file>.tar.gz  # 恢复备份
+make check     # 语法与compose校验
+make test      # 运行API测试
+make smoke     # API冒烟测试
+```
+
+## 备份与恢复
+备份：
+```bash
+./scripts/backup.sh
+```
+
+恢复（会先停止服务）：
+```bash
+./scripts/restore.sh ./backups/<backup-file>.tar.gz --yes
+make up
 ```
 
 ## 注意事项

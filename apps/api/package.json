@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test test/**/*.test.js",
+    "check": "sh -c 'for f in $(find src -name \"*.js\"); do node --check \"$f\"; done'"
   },
   "dependencies": {
     "acme-client": "^5.4.0",
@@ -21,5 +23,8 @@
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
     "systeminformation": "^5.25.11"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
   }
 }

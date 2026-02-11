@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: API syntax check
+        working-directory: apps/api
+        run: npm run check
+
+      - name: API unit tests
+        working-directory: apps/api
+        run: npm test
+
+      - name: API smoke test
+        run: ./scripts/smoke-api.sh 18091
+
+      - name: Web syntax check
+        run: node --check apps/web/app.js
+
+      - name: Compose config check
+        run: docker compose -f infra/docker-compose.yml config >/dev/null
