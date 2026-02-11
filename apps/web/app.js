@@ -200,8 +200,25 @@ async function renderDashboard() {
 
     const latest = data.media.data?.latest || [];
     const completed = data.recentCompleted.data || [];
+    const alerts = data.alerts || [];
 
     pageContentEl.innerHTML = `
+      <section class="card">
+        <h3>告警中心</h3>
+        <div class="list">
+          ${
+            alerts.length
+              ? alerts
+                  .map(
+                    (a) =>
+                      `<div class="list-item"><div class="list-title">${a.code}</div><div class="text-muted">[${a.severity}] ${a.message}</div></div>`
+                  )
+                  .join("")
+              : '<div class="text-muted">当前无告警</div>'
+          }
+        </div>
+      </section>
+
       <section class="grid-4">
         <div class="card stat"><div class="stat-label">容器总数</div><div class="stat-value">${containerSummary.total}</div><div class="text-muted">运行 ${containerSummary.running} / 停止 ${containerSummary.stopped} / 异常 ${containerSummary.error}</div></div>
         <div class="card stat"><div class="stat-label">Jellyfin</div><div class="stat-value">${mediaSummary.activeSessions}</div><div class="text-muted">活跃播放会话</div></div>
