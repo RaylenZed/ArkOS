@@ -83,6 +83,10 @@ make up
 - 用户名：`.env` 的 `ADMIN_USERNAME`
 - 密码：`.env` 的 `ADMIN_PASSWORD`
 
+说明：
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` 只在首次初始化数据库时生效。
+- 后续若改了 `.env`，不会自动覆盖已有数据库用户密码。
+
 ## 关键配置说明
 - `PUBLIC_PORT`：对外端口（默认 `24443`）
 - `DOCKER_HOST`：已默认走 `docker-socket-proxy`
@@ -125,6 +129,7 @@ make smoke     # API冒烟测试
 ./scripts/manage.sh up     # 无make环境启动
 ./scripts/manage.sh ps     # 无make环境查看状态
 ./scripts/manage.sh logs   # 无make环境查看日志
+./scripts/manage.sh reset-admin-password '<新密码>' [用户名]  # 重置本地数据库密码
 cd apps/api && npm run check  # 无make环境语法检查
 cd apps/api && npm test       # 无make环境运行测试
 ./scripts/smoke-api.sh        # 无make环境冒烟测试

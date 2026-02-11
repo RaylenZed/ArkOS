@@ -87,22 +87,37 @@ function statusClass(stateValue) {
 }
 
 async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
+  const { skipAuthHandling = false, ...fetchOptions } = options;
+  const headers = { ...(fetchOptions.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
 
   const res = await fetch(path, {
-    ...options,
+    ...fetchOptions,
     headers
   });
 
+  let errorMessage = "";
+  if (!res.ok) {
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      errorMessage = data.error || `HTTP ${res.status}`;
+    } else {
+      const text = await res.text().catch(() => "");
+      errorMessage = text || `HTTP ${res.status}`;
+    }
+  }
+
   if (res.status === 401) {
-    forceLogout();
-    throw new Error("登录已过期，请重新登录");
+    if (!skipAuthHandling) {
+      forceLogout();
+      throw new Error("登录已过期，请重新登录");
+    }
+    throw new Error(errorMessage || "认证失败");
   }
 
   if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-    throw new Error(data.error || `HTTP ${res.status}`);
+    throw new Error(errorMessage || `HTTP ${res.status}`);
   }
 
   const ct = res.headers.get("content-type") || "";
@@ -1016,6 +1031,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 
   try {
     const data = await api("/api/auth/login", {
+      skipAuthHandling: true,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })

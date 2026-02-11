@@ -47,7 +47,8 @@
           <input name="password" type="password" placeholder="请输入密码" required />
         </label>
         <button type="submit" class="btn btn-primary full">登录</button>
-        <p class="hint">默认账号来自环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD`</p>
+        <p class="hint">默认账号仅首次初始化时从环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 写入。</p>
+        <p class="hint">公网访问请使用 HTTPS，HTTP 下密码会在传输链路中明文可见。</p>
       </form>
     </div>
 
