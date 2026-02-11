@@ -33,6 +33,9 @@ export const config = {
   jellyfinHostPort: Number(process.env.JELLYFIN_HOST_PORT || 18096),
   qbWebPort: Number(process.env.QBIT_WEB_PORT || 18080),
   qbPeerPort: Number(process.env.QBIT_PEER_PORT || 16881),
+  portainerHostPort: Number(process.env.PORTAINER_HOST_PORT || 19000),
+  watchtowerInterval: Number(process.env.WATCHTOWER_INTERVAL || 86400),
+  internalNetwork: process.env.ARKNAS_INTERNAL_NETWORK || "arknas-hub_arknas_internal",
   certsDir: process.env.CERTS_DIR || path.resolve(process.cwd(), "data/certs"),
   acmeEmail: process.env.ACME_EMAIL || "",
   acmeDirectory:

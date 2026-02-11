@@ -21,8 +21,9 @@
   - 暂停/继续/删除
   - 添加磁力链接
 - 应用中心（面板内安装）
-  - 一键安装 Jellyfin / qBittorrent
+  - 一键安装 Jellyfin / qBittorrent / Portainer / Watchtower
   - 启动/停止/重启/卸载
+  - 任务中心（进度条、状态、失败原因）
   - 支持在设置页配置安装目录和端口
 - SSL 管理面板
   - Cloudflare DNS Challenge 签发证书
@@ -87,6 +88,9 @@ make up
 - `QBIT_*`：下载模块配置
 - `MEDIA_PATH` / `DOWNLOADS_PATH` / `DOCKER_DATA_PATH`：应用中心安装目录
 - `JELLYFIN_HOST_PORT` / `QBIT_WEB_PORT` / `QBIT_PEER_PORT`：应用中心安装端口
+- `PORTAINER_HOST_PORT`：Portainer 端口
+- `WATCHTOWER_INTERVAL`：Watchtower 轮询秒数
+- `ARKNAS_INTERNAL_NETWORK`：应用中心容器接入的内部网络名
 - `CLOUDFLARE_API_TOKEN`：SSL 签发必须
 - `ACME_EMAIL`：证书通知邮箱（建议填写）
 

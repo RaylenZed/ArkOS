@@ -3,21 +3,62 @@ import path from "node:path";
 import { docker } from "./dockerService.js";
 import { getRawIntegrationConfig, saveIntegrations } from "./settingsService.js";
 import { HttpError } from "../lib/httpError.js";
+import {
+  createAppTask,
+  getAppTaskById,
+  listAppTasks,
+  markTaskFailed,
+  markTaskRunning,
+  markTaskSuccess,
+  updateAppTask
+} from "./appTaskService.js";
+import { writeAudit } from "./auditService.js";
+import { config } from "../config.js";
 
 const APP_DEFINITIONS = {
   jellyfin: {
     id: "jellyfin",
     name: "Jellyfin",
     containerName: "arknas-jellyfin",
-    image: "jellyfin/jellyfin:latest"
+    image: "jellyfin/jellyfin:latest",
+    category: "媒体",
+    description: "媒体库管理与播放服务",
+    openPortKey: "jellyfinHostPort",
+    openPath: "/"
   },
   qbittorrent: {
     id: "qbittorrent",
     name: "qBittorrent",
     containerName: "arknas-qbittorrent",
-    image: "lscr.io/linuxserver/qbittorrent:latest"
+    image: "lscr.io/linuxserver/qbittorrent:latest",
+    category: "下载",
+    description: "BT 下载与做种管理",
+    openPortKey: "qbWebPort",
+    openPath: "/"
+  },
+  portainer: {
+    id: "portainer",
+    name: "Portainer",
+    containerName: "arknas-portainer",
+    image: "portainer/portainer-ce:latest",
+    category: "运维",
+    description: "容器可视化管理",
+    openPortKey: "portainerHostPort",
+    openPath: "/"
+  },
+  watchtower: {
+    id: "watchtower",
+    name: "Watchtower",
+    containerName: "arknas-watchtower",
+    image: "containrrr/watchtower:latest",
+    category: "运维",
+    description: "自动更新容器镜像",
+    openPortKey: null,
+    openPath: ""
   }
 };
+
+const runningTasks = new Set();
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -27,10 +68,21 @@ function normalizeHostPath(p) {
   return path.resolve(String(p || "").trim());
 }
 
-async function findContainerByName(name) {
+function getAppDef(appId) {
+  const appDef = APP_DEFINITIONS[appId];
+  if (!appDef) throw new HttpError(400, "不支持的应用");
+  return appDef;
+}
+
+async function findContainerSummaryByName(name) {
   const list = await docker.listContainers({ all: true, filters: { name: [name] } });
-  if (!list.length) return null;
-  return docker.getContainer(list[0].Id);
+  return list[0] || null;
+}
+
+async function findContainerByName(name) {
+  const summary = await findContainerSummaryByName(name);
+  if (!summary) return null;
+  return docker.getContainer(summary.Id);
 }
 
 async function pullImage(image) {
@@ -49,13 +101,14 @@ async function pullImage(image) {
   });
 }
 
-function buildStatus(appDef, containerInfo) {
+function buildStatus(appDef, containerInfo, cfg) {
   if (!containerInfo) {
     return {
       ...appDef,
       installed: false,
       running: false,
-      status: "not_installed"
+      status: "not_installed",
+      openUrl: appDef.openPortKey ? `http://127.0.0.1:${cfg[appDef.openPortKey]}${appDef.openPath}` : ""
     };
   }
 
@@ -68,27 +121,33 @@ function buildStatus(appDef, containerInfo) {
     running,
     status: running ? "running" : "stopped",
     containerId: containerInfo.Id,
-    containerStatusText: containerInfo.Status
+    containerStatusText: containerInfo.Status,
+    openUrl: appDef.openPortKey ? `http://127.0.0.1:${cfg[appDef.openPortKey]}${appDef.openPath}` : ""
   };
 }
 
-export async function listManagedApps() {
-  const keys = Object.keys(APP_DEFINITIONS);
-  const statuses = await Promise.all(
-    keys.map(async (key) => {
-      const app = APP_DEFINITIONS[key];
-      const containers = await docker.listContainers({
-        all: true,
-        filters: { name: [app.containerName] }
-      });
-      return buildStatus(app, containers[0] || null);
-    })
-  );
-
-  return statuses;
+function buildCommonContainerOptions(appDef) {
+  return {
+    name: appDef.containerName,
+    Image: appDef.image,
+    HostConfig: {
+      RestartPolicy: { Name: "unless-stopped" },
+      NetworkMode: config.internalNetwork
+    },
+    NetworkingConfig: {
+      EndpointsConfig: {
+        [config.internalNetwork]: {}
+      }
+    },
+    Labels: {
+      "arknas.managed": "true",
+      "arknas.app": appDef.id
+    }
+  };
 }
 
 function buildJellyfinOptions(cfg) {
+  const appDef = APP_DEFINITIONS.jellyfin;
   const mediaPath = normalizeHostPath(cfg.mediaPath);
   const dockerDataPath = normalizeHostPath(cfg.dockerDataPath);
   const configDir = path.join(dockerDataPath, "jellyfin", "config");
@@ -98,27 +157,25 @@ function buildJellyfinOptions(cfg) {
   ensureDir(configDir);
   ensureDir(cacheDir);
 
+  const base = buildCommonContainerOptions(appDef);
+
   return {
-    name: APP_DEFINITIONS.jellyfin.containerName,
-    Image: APP_DEFINITIONS.jellyfin.image,
+    ...base,
     ExposedPorts: {
       "8096/tcp": {}
     },
     HostConfig: {
+      ...base.HostConfig,
       Binds: [`${configDir}:/config`, `${cacheDir}:/cache`, `${mediaPath}:/media`],
       PortBindings: {
         "8096/tcp": [{ HostPort: String(cfg.jellyfinHostPort) }]
-      },
-      RestartPolicy: { Name: "unless-stopped" }
-    },
-    Labels: {
-      "arknas.managed": "true",
-      "arknas.app": "jellyfin"
+      }
     }
   };
 }
 
 function buildQBOptions(cfg) {
+  const appDef = APP_DEFINITIONS.qbittorrent;
   const downloadsPath = normalizeHostPath(cfg.downloadsPath);
   const dockerDataPath = normalizeHostPath(cfg.dockerDataPath);
   const configDir = path.join(dockerDataPath, "qbittorrent", "config");
@@ -126,9 +183,10 @@ function buildQBOptions(cfg) {
   ensureDir(downloadsPath);
   ensureDir(configDir);
 
+  const base = buildCommonContainerOptions(appDef);
+
   return {
-    name: APP_DEFINITIONS.qbittorrent.containerName,
-    Image: APP_DEFINITIONS.qbittorrent.image,
+    ...base,
     Env: [
       `TZ=${process.env.TZ || "Asia/Shanghai"}`,
       "PUID=0",
@@ -142,25 +200,79 @@ function buildQBOptions(cfg) {
       "6881/udp": {}
     },
     HostConfig: {
+      ...base.HostConfig,
       Binds: [`${configDir}:/config`, `${downloadsPath}:/downloads`],
       PortBindings: {
         "8080/tcp": [{ HostPort: String(cfg.qbWebPort) }],
         "6881/tcp": [{ HostPort: String(cfg.qbPeerPort) }],
         "6881/udp": [{ HostPort: String(cfg.qbPeerPort) }]
-      },
-      RestartPolicy: { Name: "unless-stopped" }
-    },
-    Labels: {
-      "arknas.managed": "true",
-      "arknas.app": "qbittorrent"
+      }
     }
   };
 }
 
-export async function installApp(appId) {
-  const appDef = APP_DEFINITIONS[appId];
-  if (!appDef) throw new HttpError(400, "不支持的应用");
+function buildPortainerOptions(cfg) {
+  const appDef = APP_DEFINITIONS.portainer;
+  const dockerDataPath = normalizeHostPath(cfg.dockerDataPath);
+  const dataDir = path.join(dockerDataPath, "portainer", "data");
 
+  ensureDir(dataDir);
+
+  const base = buildCommonContainerOptions(appDef);
+
+  return {
+    ...base,
+    ExposedPorts: {
+      "9000/tcp": {}
+    },
+    HostConfig: {
+      ...base.HostConfig,
+      Binds: ["/var/run/docker.sock:/var/run/docker.sock", `${dataDir}:/data`],
+      PortBindings: {
+        "9000/tcp": [{ HostPort: String(cfg.portainerHostPort) }]
+      }
+    }
+  };
+}
+
+function buildWatchtowerOptions(cfg) {
+  const appDef = APP_DEFINITIONS.watchtower;
+  const base = buildCommonContainerOptions(appDef);
+
+  return {
+    ...base,
+    Env: [
+      `TZ=${process.env.TZ || "Asia/Shanghai"}`,
+      `WATCHTOWER_POLL_INTERVAL=${cfg.watchtowerInterval}`,
+      "WATCHTOWER_CLEANUP=true",
+      "WATCHTOWER_LABEL_ENABLE=false",
+      "DOCKER_HOST=tcp://docker-proxy:2375"
+    ],
+    Cmd: ["--cleanup", `--interval`, String(cfg.watchtowerInterval)],
+    HostConfig: {
+      ...base.HostConfig
+    }
+  };
+}
+
+function buildAppCreateOptions(appId, cfg) {
+  if (appId === "jellyfin") return buildJellyfinOptions(cfg);
+  if (appId === "qbittorrent") return buildQBOptions(cfg);
+  if (appId === "portainer") return buildPortainerOptions(cfg);
+  if (appId === "watchtower") return buildWatchtowerOptions(cfg);
+  throw new HttpError(400, "不支持的应用");
+}
+
+function getAppDataDir(appId, cfg) {
+  const dockerDataPath = normalizeHostPath(cfg.dockerDataPath);
+  if (appId === "jellyfin") return path.join(dockerDataPath, "jellyfin");
+  if (appId === "qbittorrent") return path.join(dockerDataPath, "qbittorrent");
+  if (appId === "portainer") return path.join(dockerDataPath, "portainer");
+  return "";
+}
+
+async function runInstall(appId) {
+  const appDef = getAppDef(appId);
   const existing = await findContainerByName(appDef.containerName);
   if (existing) {
     throw new HttpError(409, `${appDef.name} 已安装`);
@@ -168,14 +280,7 @@ export async function installApp(appId) {
 
   const cfg = getRawIntegrationConfig();
   await pullImage(appDef.image);
-
-  let createOptions;
-  if (appId === "jellyfin") {
-    createOptions = buildJellyfinOptions(cfg);
-  } else {
-    createOptions = buildQBOptions(cfg);
-  }
-
+  const createOptions = buildAppCreateOptions(appId, cfg);
   const container = await docker.createContainer(createOptions);
   await container.start();
 
@@ -198,10 +303,8 @@ export async function installApp(appId) {
   };
 }
 
-export async function controlManagedApp(appId, action) {
-  const appDef = APP_DEFINITIONS[appId];
-  if (!appDef) throw new HttpError(400, "不支持的应用");
-
+async function runControl(appId, action) {
+  const appDef = getAppDef(appId);
   const container = await findContainerByName(appDef.containerName);
   if (!container) throw new HttpError(404, `${appDef.name} 未安装`);
 
@@ -213,10 +316,8 @@ export async function controlManagedApp(appId, action) {
   return { ok: true, appId, action };
 }
 
-export async function uninstallApp(appId, { removeData = false } = {}) {
-  const appDef = APP_DEFINITIONS[appId];
-  if (!appDef) throw new HttpError(400, "不支持的应用");
-
+async function runUninstall(appId, options = {}) {
+  const appDef = getAppDef(appId);
   const container = await findContainerByName(appDef.containerName);
   if (!container) throw new HttpError(404, `${appDef.name} 未安装`);
 
@@ -226,12 +327,104 @@ export async function uninstallApp(appId, { removeData = false } = {}) {
   }
   await container.remove({ force: true });
 
-  if (removeData) {
+  if (options.removeData) {
     const cfg = getRawIntegrationConfig();
-    const dockerDataPath = normalizeHostPath(cfg.dockerDataPath);
-    const dir = appId === "jellyfin" ? path.join(dockerDataPath, "jellyfin") : path.join(dockerDataPath, "qbittorrent");
-    fs.rmSync(dir, { recursive: true, force: true });
+    const dir = getAppDataDir(appId, cfg);
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  return { ok: true, appId, removedData: Boolean(removeData) };
+  return { ok: true, appId, removedData: Boolean(options.removeData) };
+}
+
+async function runActionWithProgress(taskId, appId, action, options = {}) {
+  if (action === "install") {
+    markTaskRunning(taskId, 10, "检查安装状态");
+    updateAppTask(taskId, { progress: 25, message: "拉取镜像中" });
+    const result = await runInstall(appId);
+    updateAppTask(taskId, { progress: 92, message: "完成容器启动" });
+    return result;
+  }
+
+  if (action === "uninstall") {
+    markTaskRunning(taskId, 15, "正在卸载应用" );
+    const result = await runUninstall(appId, options);
+    updateAppTask(taskId, { progress: 92, message: "清理完成" });
+    return result;
+  }
+
+  markTaskRunning(taskId, 20, `执行 ${action}`);
+  const result = await runControl(appId, action);
+  updateAppTask(taskId, { progress: 92, message: "操作完成" });
+  return result;
+}
+
+function scheduleTask(taskId, appId, action, actor, options = {}) {
+  if (runningTasks.has(taskId)) return;
+  runningTasks.add(taskId);
+
+  setTimeout(async () => {
+    try {
+      const result = await runActionWithProgress(taskId, appId, action, options);
+      markTaskSuccess(taskId, result.message || `${action} 成功`);
+      writeAudit({
+        action: `app_${action}`,
+        actor,
+        target: appId,
+        status: "ok",
+        detail: JSON.stringify(result)
+      });
+    } catch (err) {
+      const message = err?.message || String(err);
+      markTaskFailed(taskId, message);
+      writeAudit({
+        action: `app_${action}`,
+        actor,
+        target: appId,
+        status: "failed",
+        detail: message
+      });
+    } finally {
+      runningTasks.delete(taskId);
+    }
+  }, 20);
+}
+
+export async function listManagedApps() {
+  const cfg = getRawIntegrationConfig();
+  const keys = Object.keys(APP_DEFINITIONS);
+  const statuses = await Promise.all(
+    keys.map(async (key) => {
+      const app = APP_DEFINITIONS[key];
+      const container = await findContainerSummaryByName(app.containerName);
+      return buildStatus(app, container, cfg);
+    })
+  );
+
+  return statuses;
+}
+
+export function listManagedAppTasks(limit = 60) {
+  return listAppTasks(limit);
+}
+
+export function getManagedAppTask(taskId) {
+  return getAppTaskById(taskId);
+}
+
+export function createAppActionTask({ appId, action, actor = "system", options = {} }) {
+  getAppDef(appId);
+  const supported = ["install", "start", "stop", "restart", "uninstall"];
+  if (!supported.includes(action)) {
+    throw new HttpError(400, "不支持的任务动作");
+  }
+
+  const task = createAppTask({
+    appId,
+    action,
+    actor,
+    message: `已加入队列：${action}`
+  });
+
+  scheduleTask(task.id, appId, action, actor, options);
+  return task;
 }

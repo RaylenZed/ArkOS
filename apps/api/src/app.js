@@ -66,7 +66,8 @@ export function createApp() {
         "qbittorrent",
         "ssl-management",
         "audit-log",
-        "app-center"
+        "app-center",
+        "app-task-center"
       ]
     });
   });

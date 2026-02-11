@@ -2,12 +2,11 @@ import express from "express";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import {
-  controlManagedApp,
-  installApp,
+  createAppActionTask,
+  getManagedAppTask,
   listManagedApps,
-  uninstallApp
+  listManagedAppTasks
 } from "../services/appsService.js";
-import { writeAudit } from "../services/auditService.js";
 
 const router = express.Router();
 router.use(requireAuth);
@@ -19,31 +18,46 @@ router.get(
   })
 );
 
+router.get(
+  "/tasks",
+  asyncHandler(async (req, res) => {
+    const limit = Number(req.query.limit || 60);
+    res.json(listManagedAppTasks(limit));
+  })
+);
+
+router.get(
+  "/tasks/:taskId",
+  asyncHandler(async (req, res) => {
+    const task = getManagedAppTask(Number(req.params.taskId));
+    if (!task) {
+      return res.status(404).json({ error: "任务不存在" });
+    }
+    res.json(task);
+  })
+);
+
 router.post(
   "/:appId/install",
   asyncHandler(async (req, res) => {
-    const result = await installApp(req.params.appId);
-    writeAudit({
-      action: "app_install",
-      actor: req.user.username,
-      target: req.params.appId,
-      status: "ok"
+    const task = createAppActionTask({
+      appId: req.params.appId,
+      action: "install",
+      actor: req.user.username
     });
-    res.json(result);
+    res.status(202).json(task);
   })
 );
 
 router.post(
   "/:appId/:action(start|stop|restart)",
   asyncHandler(async (req, res) => {
-    const result = await controlManagedApp(req.params.appId, req.params.action);
-    writeAudit({
-      action: `app_${req.params.action}`,
-      actor: req.user.username,
-      target: req.params.appId,
-      status: "ok"
+    const task = createAppActionTask({
+      appId: req.params.appId,
+      action: req.params.action,
+      actor: req.user.username
     });
-    res.json(result);
+    res.status(202).json(task);
   })
 );
 
@@ -51,15 +65,13 @@ router.delete(
   "/:appId",
   asyncHandler(async (req, res) => {
     const removeData = Boolean(req.query.removeData === "1");
-    const result = await uninstallApp(req.params.appId, { removeData });
-    writeAudit({
-      action: "app_uninstall",
+    const task = createAppActionTask({
+      appId: req.params.appId,
+      action: "uninstall",
       actor: req.user.username,
-      target: req.params.appId,
-      status: "ok",
-      detail: `removeData=${removeData}`
+      options: { removeData }
     });
-    res.json(result);
+    res.status(202).json(task);
   })
 );
 

@@ -163,6 +163,7 @@ async function navigate(page) {
     await renderDownloads();
   } else if (page === "apps") {
     await renderApps();
+    state.refreshTimer = setInterval(renderApps, 5000);
   } else if (page === "ssl") {
     await renderSSL();
   } else if (page === "settings") {
@@ -583,8 +584,16 @@ async function renderDownloads() {
 
 async function renderApps() {
   try {
-    const apps = await api("/api/apps");
+    const [apps, tasks] = await Promise.all([
+      api("/api/apps"),
+      api("/api/apps/tasks?limit=80")
+    ]);
     const integrations = await api("/api/settings/integrations");
+    const activeTasks = tasks.filter((t) => t.status === "queued" || t.status === "running");
+    const taskByApp = new Map();
+    for (const t of activeTasks) {
+      if (!taskByApp.has(t.app_id)) taskByApp.set(t.app_id, t);
+    }
 
     const appCards = apps
       .map((app) => {
@@ -594,26 +603,34 @@ async function renderApps() {
             : "已安装（未运行）"
           : "未安装";
 
-        const openUrl =
-          app.id === "jellyfin"
-            ? `http://${location.hostname}:${integrations.jellyfinHostPort}`
-            : `http://${location.hostname}:${integrations.qbWebPort}`;
+        const openUrl = app.openPortKey
+          ? `http://${location.hostname}:${integrations[app.openPortKey]}`
+          : "";
+        const activeTask = taskByApp.get(app.id);
+        const busy = Boolean(activeTask);
 
         return `
           <div class="card">
             <h3>${app.name}</h3>
+            <p class="text-muted">${app.description || ""}</p>
+            <p class="text-muted">分类：${app.category || "-"}</p>
             <p class="text-muted">容器名：${app.containerName}</p>
             <p>状态：${statusText}</p>
+            ${
+              activeTask
+                ? `<div class="list-item"><div class="list-title">任务 #${activeTask.id} ${activeTask.action}</div><div class="text-muted">${activeTask.message || ""}</div><div class="progress"><span style="width:${activeTask.progress}%"></span></div></div>`
+                : ""
+            }
             <div class="actions">
               ${
                 !app.installed
-                  ? `<button class="btn btn-primary" data-app-action="install" data-app-id="${app.id}">安装</button>`
+                  ? `<button class="btn btn-primary" data-app-action="install" data-app-id="${app.id}" ${busy ? "disabled" : ""}>安装</button>`
                   : `
-                    <button class="btn btn-secondary" data-app-action="start" data-app-id="${app.id}">启动</button>
-                    <button class="btn btn-secondary" data-app-action="stop" data-app-id="${app.id}">停止</button>
-                    <button class="btn btn-secondary" data-app-action="restart" data-app-id="${app.id}">重启</button>
-                    <button class="btn btn-danger" data-app-action="uninstall" data-app-id="${app.id}">卸载</button>
-                    <a class="btn btn-secondary" href="${openUrl}" target="_blank">打开</a>
+                    <button class="btn btn-secondary" data-app-action="start" data-app-id="${app.id}" ${busy ? "disabled" : ""}>启动</button>
+                    <button class="btn btn-secondary" data-app-action="stop" data-app-id="${app.id}" ${busy ? "disabled" : ""}>停止</button>
+                    <button class="btn btn-secondary" data-app-action="restart" data-app-id="${app.id}" ${busy ? "disabled" : ""}>重启</button>
+                    <button class="btn btn-danger" data-app-action="uninstall" data-app-id="${app.id}" ${busy ? "disabled" : ""}>卸载</button>
+                    ${openUrl ? `<a class="btn btn-secondary" href="${openUrl}" target="_blank">打开</a>` : ""}
                   `
               }
             </div>
@@ -625,9 +642,35 @@ async function renderApps() {
     pageContentEl.innerHTML = `
       <section class="card">
         <h3>应用中心</h3>
-        <p class="text-muted">可在面板内一键安装/管理 Jellyfin 与 qBittorrent。安装参数可在“设置”页调整。</p>
+        <p class="text-muted">可在面板内一键安装/管理 Jellyfin、qBittorrent、Portainer、Watchtower。安装参数可在“设置”页调整。</p>
       </section>
       <section class="grid-2">${appCards}</section>
+      <section class="card">
+        <h3>任务中心</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>应用</th><th>动作</th><th>状态</th><th>进度</th><th>信息</th><th>错误</th><th>时间</th></tr></thead>
+            <tbody>
+              ${
+                tasks
+                  .map(
+                    (t) => `<tr>
+                      <td>#${t.id}</td>
+                      <td>${t.app_id}</td>
+                      <td>${t.action}</td>
+                      <td>${t.status}</td>
+                      <td>${t.progress}%</td>
+                      <td>${t.message || "-"}</td>
+                      <td>${t.error_detail || "-"}</td>
+                      <td>${formatDate(t.created_at)}</td>
+                    </tr>`
+                  )
+                  .join("") || "<tr><td colspan='8'>暂无任务</td></tr>"
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
     `;
 
     pageContentEl.querySelectorAll("[data-app-action]").forEach((btn) => {
@@ -636,16 +679,18 @@ async function renderApps() {
         const appId = btn.dataset.appId;
         try {
           if (action === "install") {
-            await api(`/api/apps/${appId}/install`, { method: "POST" });
+            const task = await api(`/api/apps/${appId}/install`, { method: "POST" });
+            showToast(`任务已创建 #${task.id}`);
           } else if (action === "uninstall") {
             const removeData = confirm("是否同时删除应用数据目录？");
-            await api(`/api/apps/${appId}?removeData=${removeData ? "1" : "0"}`, {
+            const task = await api(`/api/apps/${appId}?removeData=${removeData ? "1" : "0"}`, {
               method: "DELETE"
             });
+            showToast(`任务已创建 #${task.id}`);
           } else {
-            await api(`/api/apps/${appId}/${action}`, { method: "POST" });
+            const task = await api(`/api/apps/${appId}/${action}`, { method: "POST" });
+            showToast(`任务已创建 #${task.id}`);
           }
-          showToast("操作成功");
           await renderApps();
         } catch (err) {
           showToast(err.message);
@@ -784,6 +829,8 @@ async function renderSettings() {
           <label>Jellyfin 对外端口<input id="s_jellyfinHostPort" type="number" value="${integrations.jellyfinHostPort || 18096}" /></label>
           <label>qB Web 端口<input id="s_qbWebPort" type="number" value="${integrations.qbWebPort || 18080}" /></label>
           <label>qB Peer 端口(TCP/UDP)<input id="s_qbPeerPort" type="number" value="${integrations.qbPeerPort || 16881}" /></label>
+          <label>Portainer 对外端口<input id="s_portainerHostPort" type="number" value="${integrations.portainerHostPort || 19000}" /></label>
+          <label>Watchtower 轮询间隔(秒)<input id="s_watchtowerInterval" type="number" value="${integrations.watchtowerInterval || 86400}" /></label>
         </div>
         <div class="actions" style="margin-top: 10px;">
           <button id="saveSettingsBtn" class="btn btn-primary">保存设置</button>
@@ -821,7 +868,9 @@ async function renderSettings() {
           dockerDataPath: document.getElementById("s_dockerDataPath").value.trim(),
           jellyfinHostPort: Number(document.getElementById("s_jellyfinHostPort").value || 18096),
           qbWebPort: Number(document.getElementById("s_qbWebPort").value || 18080),
-          qbPeerPort: Number(document.getElementById("s_qbPeerPort").value || 16881)
+          qbPeerPort: Number(document.getElementById("s_qbPeerPort").value || 16881),
+          portainerHostPort: Number(document.getElementById("s_portainerHostPort").value || 19000),
+          watchtowerInterval: Number(document.getElementById("s_watchtowerInterval").value || 86400)
         };
 
         await api("/api/settings/integrations", {

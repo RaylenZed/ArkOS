@@ -13,7 +13,9 @@ const INTEGRATION_KEYS = [
   "dockerDataPath",
   "jellyfinHostPort",
   "qbWebPort",
-  "qbPeerPort"
+  "qbPeerPort",
+  "portainerHostPort",
+  "watchtowerInterval"
 ];
 
 function getSetting(key, fallback = "") {
@@ -40,7 +42,9 @@ export function getIntegrations() {
     dockerDataPath: getSetting("dockerDataPath", config.dockerDataPath),
     jellyfinHostPort: getNumberSetting("jellyfinHostPort", config.jellyfinHostPort),
     qbWebPort: getNumberSetting("qbWebPort", config.qbWebPort),
-    qbPeerPort: getNumberSetting("qbPeerPort", config.qbPeerPort)
+    qbPeerPort: getNumberSetting("qbPeerPort", config.qbPeerPort),
+    portainerHostPort: getNumberSetting("portainerHostPort", config.portainerHostPort),
+    watchtowerInterval: getNumberSetting("watchtowerInterval", config.watchtowerInterval)
   };
 }
 
@@ -57,7 +61,9 @@ export function getRawIntegrationConfig() {
     dockerDataPath: getSetting("dockerDataPath", config.dockerDataPath),
     jellyfinHostPort: getNumberSetting("jellyfinHostPort", config.jellyfinHostPort),
     qbWebPort: getNumberSetting("qbWebPort", config.qbWebPort),
-    qbPeerPort: getNumberSetting("qbPeerPort", config.qbPeerPort)
+    qbPeerPort: getNumberSetting("qbPeerPort", config.qbPeerPort),
+    portainerHostPort: getNumberSetting("portainerHostPort", config.portainerHostPort),
+    watchtowerInterval: getNumberSetting("watchtowerInterval", config.watchtowerInterval)
   };
 }
 
