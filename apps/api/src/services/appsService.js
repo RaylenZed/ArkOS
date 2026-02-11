@@ -4,8 +4,11 @@ import { docker } from "./dockerService.js";
 import { getRawIntegrationConfig, saveIntegrations } from "./settingsService.js";
 import { HttpError } from "../lib/httpError.js";
 import {
+  appendTaskLog,
+  cloneFailedTaskAsRetry,
   createAppTask,
   getAppTaskById,
+  getTaskLogs,
   listAppTasks,
   markTaskFailed,
   markTaskRunning,
@@ -58,6 +61,14 @@ const APP_DEFINITIONS = {
   }
 };
 
+const BUNDLE_DEFINITIONS = {
+  "media-stack": {
+    id: "media-stack",
+    name: "影视套件",
+    apps: ["jellyfin", "qbittorrent", "watchtower"]
+  }
+};
+
 const runningTasks = new Set();
 
 function ensureDir(dirPath) {
@@ -74,6 +85,12 @@ function getAppDef(appId) {
   return appDef;
 }
 
+function getBundleDef(bundleId) {
+  const bundle = BUNDLE_DEFINITIONS[bundleId];
+  if (!bundle) throw new HttpError(400, "不支持的应用套件");
+  return bundle;
+}
+
 async function findContainerSummaryByName(name) {
   const list = await docker.listContainers({ all: true, filters: { name: [name] } });
   return list[0] || null;
@@ -85,7 +102,7 @@ async function findContainerByName(name) {
   return docker.getContainer(summary.Id);
 }
 
-async function pullImage(image) {
+async function pullImage(image, onProgress) {
   return new Promise((resolve, reject) => {
     docker.pull(image, (err, stream) => {
       if (err) return reject(err);
@@ -95,7 +112,9 @@ async function pullImage(image) {
           if (progressErr) reject(progressErr);
           else resolve(true);
         },
-        () => {}
+        (event) => {
+          if (onProgress) onProgress(event);
+        }
       );
     });
   });
@@ -179,6 +198,8 @@ function buildQBOptions(cfg) {
   const downloadsPath = normalizeHostPath(cfg.downloadsPath);
   const dockerDataPath = normalizeHostPath(cfg.dockerDataPath);
   const configDir = path.join(dockerDataPath, "qbittorrent", "config");
+  const webPort = String(cfg.qbWebPort);
+  const peerPort = String(cfg.qbPeerPort);
 
   ensureDir(downloadsPath);
   ensureDir(configDir);
@@ -191,21 +212,21 @@ function buildQBOptions(cfg) {
       `TZ=${process.env.TZ || "Asia/Shanghai"}`,
       "PUID=0",
       "PGID=0",
-      `WEBUI_PORT=${cfg.qbWebPort}`,
-      `TORRENTING_PORT=${cfg.qbPeerPort}`
+      `WEBUI_PORT=${webPort}`,
+      `TORRENTING_PORT=${peerPort}`
     ],
     ExposedPorts: {
-      "8080/tcp": {},
-      "6881/tcp": {},
-      "6881/udp": {}
+      [`${webPort}/tcp`]: {},
+      [`${peerPort}/tcp`]: {},
+      [`${peerPort}/udp`]: {}
     },
     HostConfig: {
       ...base.HostConfig,
       Binds: [`${configDir}:/config`, `${downloadsPath}:/downloads`],
       PortBindings: {
-        "8080/tcp": [{ HostPort: String(cfg.qbWebPort) }],
-        "6881/tcp": [{ HostPort: String(cfg.qbPeerPort) }],
-        "6881/udp": [{ HostPort: String(cfg.qbPeerPort) }]
+        [`${webPort}/tcp`]: [{ HostPort: webPort }],
+        [`${peerPort}/tcp`]: [{ HostPort: peerPort }],
+        [`${peerPort}/udp`]: [{ HostPort: peerPort }]
       }
     }
   };
@@ -248,7 +269,7 @@ function buildWatchtowerOptions(cfg) {
       "WATCHTOWER_LABEL_ENABLE=false",
       "DOCKER_HOST=tcp://docker-proxy:2375"
     ],
-    Cmd: ["--cleanup", `--interval`, String(cfg.watchtowerInterval)],
+    Cmd: ["--cleanup", "--interval", String(cfg.watchtowerInterval)],
     HostConfig: {
       ...base.HostConfig
     }
@@ -271,18 +292,34 @@ function getAppDataDir(appId, cfg) {
   return "";
 }
 
-async function runInstall(appId) {
+async function runInstall(appId, taskId, options = {}) {
   const appDef = getAppDef(appId);
   const existing = await findContainerByName(appDef.containerName);
   if (existing) {
+    if (options.skipIfInstalled) {
+      appendTaskLog(taskId, `${appDef.name} 已安装，跳过`);
+      return { ok: true, appId, skipped: true, message: `${appDef.name} 已安装` };
+    }
     throw new HttpError(409, `${appDef.name} 已安装`);
   }
 
   const cfg = getRawIntegrationConfig();
-  await pullImage(appDef.image);
+  appendTaskLog(taskId, `开始拉取镜像 ${appDef.image}`);
+  await pullImage(appDef.image, (event) => {
+    if (!event) return;
+    if (event.status && (event.status.includes("Pulling") || event.status.includes("Downloading") || event.status.includes("Extracting"))) {
+      appendTaskLog(taskId, `${event.status}${event.progress ? ` ${event.progress}` : ""}`);
+    }
+  });
+
+  updateAppTask(taskId, { progress: 45, message: "创建容器" });
   const createOptions = buildAppCreateOptions(appId, cfg);
   const container = await docker.createContainer(createOptions);
+  appendTaskLog(taskId, `容器已创建 ${container.id.slice(0, 12)}`);
+
+  updateAppTask(taskId, { progress: 72, message: "启动容器" });
   await container.start();
+  appendTaskLog(taskId, `${appDef.name} 已启动`);
 
   const updates = {};
   if (appId === "jellyfin" && !cfg.jellyfinBaseUrl) {
@@ -303,34 +340,41 @@ async function runInstall(appId) {
   };
 }
 
-async function runControl(appId, action) {
+async function runControl(appId, action, taskId) {
   const appDef = getAppDef(appId);
   const container = await findContainerByName(appDef.containerName);
   if (!container) throw new HttpError(404, `${appDef.name} 未安装`);
 
+  appendTaskLog(taskId, `${appDef.name} 执行 ${action}`);
   if (action === "start") await container.start();
   else if (action === "stop") await container.stop();
   else if (action === "restart") await container.restart();
   else throw new HttpError(400, "不支持的操作");
 
+  appendTaskLog(taskId, `${appDef.name} ${action} 完成`);
   return { ok: true, appId, action };
 }
 
-async function runUninstall(appId, options = {}) {
+async function runUninstall(appId, options = {}, taskId) {
   const appDef = getAppDef(appId);
   const container = await findContainerByName(appDef.containerName);
   if (!container) throw new HttpError(404, `${appDef.name} 未安装`);
 
   const inspect = await container.inspect();
   if (inspect.State?.Running) {
+    appendTaskLog(taskId, "停止容器");
     await container.stop({ t: 10 });
   }
+  appendTaskLog(taskId, "删除容器");
   await container.remove({ force: true });
 
   if (options.removeData) {
     const cfg = getRawIntegrationConfig();
     const dir = getAppDataDir(appId, cfg);
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    if (dir) {
+      appendTaskLog(taskId, `删除数据目录 ${dir}`);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   return { ok: true, appId, removedData: Boolean(options.removeData) };
@@ -338,24 +382,41 @@ async function runUninstall(appId, options = {}) {
 
 async function runActionWithProgress(taskId, appId, action, options = {}) {
   if (action === "install") {
-    markTaskRunning(taskId, 10, "检查安装状态");
-    updateAppTask(taskId, { progress: 25, message: "拉取镜像中" });
-    const result = await runInstall(appId);
-    updateAppTask(taskId, { progress: 92, message: "完成容器启动" });
+    markTaskRunning(taskId, 8, "检查安装状态");
+    const result = await runInstall(appId, taskId, options);
+    updateAppTask(taskId, { progress: 95, message: "完成容器启动" });
     return result;
   }
 
   if (action === "uninstall") {
-    markTaskRunning(taskId, 15, "正在卸载应用" );
-    const result = await runUninstall(appId, options);
-    updateAppTask(taskId, { progress: 92, message: "清理完成" });
+    markTaskRunning(taskId, 10, "正在卸载应用");
+    const result = await runUninstall(appId, options, taskId);
+    updateAppTask(taskId, { progress: 95, message: "清理完成" });
     return result;
   }
 
   markTaskRunning(taskId, 20, `执行 ${action}`);
-  const result = await runControl(appId, action);
-  updateAppTask(taskId, { progress: 92, message: "操作完成" });
+  const result = await runControl(appId, action, taskId);
+  updateAppTask(taskId, { progress: 95, message: "操作完成" });
   return result;
+}
+
+async function runBundleInstall(taskId, bundleId) {
+  const bundle = getBundleDef(bundleId);
+  markTaskRunning(taskId, 5, `开始安装套件：${bundle.name}`);
+  appendTaskLog(taskId, `套件包含：${bundle.apps.join(", ")}`);
+
+  for (let i = 0; i < bundle.apps.length; i += 1) {
+    const appId = bundle.apps[i];
+    const percentBase = 10 + Math.floor((i / bundle.apps.length) * 75);
+    updateAppTask(taskId, { progress: percentBase, message: `安装 ${appId}` });
+    appendTaskLog(taskId, `安装子应用 ${appId}`);
+    await runInstall(appId, taskId, { skipIfInstalled: true });
+  }
+
+  updateAppTask(taskId, { progress: 96, message: "套件安装完成" });
+  appendTaskLog(taskId, "套件安装全部完成");
+  return { ok: true, bundleId, message: `${bundle.name} 安装完成` };
 }
 
 function scheduleTask(taskId, appId, action, actor, options = {}) {
@@ -366,6 +427,7 @@ function scheduleTask(taskId, appId, action, actor, options = {}) {
     try {
       const result = await runActionWithProgress(taskId, appId, action, options);
       markTaskSuccess(taskId, result.message || `${action} 成功`);
+      appendTaskLog(taskId, "任务完成");
       writeAudit({
         action: `app_${action}`,
         actor,
@@ -376,10 +438,44 @@ function scheduleTask(taskId, appId, action, actor, options = {}) {
     } catch (err) {
       const message = err?.message || String(err);
       markTaskFailed(taskId, message);
+      appendTaskLog(taskId, `失败：${message}`);
       writeAudit({
         action: `app_${action}`,
         actor,
         target: appId,
+        status: "failed",
+        detail: message
+      });
+    } finally {
+      runningTasks.delete(taskId);
+    }
+  }, 20);
+}
+
+function scheduleBundleTask(taskId, bundleId, actor) {
+  if (runningTasks.has(taskId)) return;
+  runningTasks.add(taskId);
+
+  setTimeout(async () => {
+    try {
+      const result = await runBundleInstall(taskId, bundleId);
+      markTaskSuccess(taskId, result.message || "套件安装成功");
+      appendTaskLog(taskId, "套件任务完成");
+      writeAudit({
+        action: "app_bundle_install",
+        actor,
+        target: bundleId,
+        status: "ok",
+        detail: JSON.stringify(result)
+      });
+    } catch (err) {
+      const message = err?.message || String(err);
+      markTaskFailed(taskId, message);
+      appendTaskLog(taskId, `失败：${message}`);
+      writeAudit({
+        action: "app_bundle_install",
+        actor,
+        target: bundleId,
         status: "failed",
         detail: message
       });
@@ -403,12 +499,20 @@ export async function listManagedApps() {
   return statuses;
 }
 
+export function listManagedBundles() {
+  return Object.values(BUNDLE_DEFINITIONS);
+}
+
 export function listManagedAppTasks(limit = 60) {
   return listAppTasks(limit);
 }
 
 export function getManagedAppTask(taskId) {
   return getAppTaskById(taskId);
+}
+
+export function getManagedAppTaskLogs(taskId) {
+  return getTaskLogs(taskId);
 }
 
 export function createAppActionTask({ appId, action, actor = "system", options = {} }) {
@@ -422,9 +526,44 @@ export function createAppActionTask({ appId, action, actor = "system", options =
     appId,
     action,
     actor,
-    message: `已加入队列：${action}`
+    message: `已加入队列：${action}`,
+    options
   });
 
+  appendTaskLog(task.id, `任务创建：${appId} ${action}`);
   scheduleTask(task.id, appId, action, actor, options);
   return task;
+}
+
+export function createBundleInstallTask({ bundleId = "media-stack", actor = "system" }) {
+  const bundle = getBundleDef(bundleId);
+  const task = createAppTask({
+    appId: bundle.id,
+    action: "install_bundle",
+    actor,
+    message: `已加入队列：安装 ${bundle.name}`,
+    options: { bundleId, apps: bundle.apps }
+  });
+
+  appendTaskLog(task.id, `任务创建：bundle ${bundleId}`);
+  scheduleBundleTask(task.id, bundleId, actor);
+  return task;
+}
+
+export function retryManagedAppTask(taskId, actor = "system") {
+  const retryTask = cloneFailedTaskAsRetry(taskId, actor);
+  if (!retryTask) {
+    throw new HttpError(400, "仅失败任务允许重试");
+  }
+
+  appendTaskLog(retryTask.id, `重试来源任务 #${taskId}`);
+
+  if (retryTask.app_id in BUNDLE_DEFINITIONS || retryTask.action === "install_bundle") {
+    const bundleId = retryTask.options?.bundleId || retryTask.app_id;
+    scheduleBundleTask(retryTask.id, bundleId, actor);
+  } else {
+    scheduleTask(retryTask.id, retryTask.app_id, retryTask.action, actor, retryTask.options || {});
+  }
+
+  return retryTask;
 }

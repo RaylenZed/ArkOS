@@ -2,10 +2,14 @@ import express from "express";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import {
+  createBundleInstallTask,
   createAppActionTask,
   getManagedAppTask,
+  getManagedAppTaskLogs,
   listManagedApps,
-  listManagedAppTasks
+  listManagedAppTasks,
+  listManagedBundles,
+  retryManagedAppTask
 } from "../services/appsService.js";
 
 const router = express.Router();
@@ -29,11 +33,51 @@ router.get(
 router.get(
   "/tasks/:taskId",
   asyncHandler(async (req, res) => {
-    const task = getManagedAppTask(Number(req.params.taskId));
+    const taskId = Number(req.params.taskId);
+    const task = getManagedAppTask(taskId);
     if (!task) {
       return res.status(404).json({ error: "任务不存在" });
     }
     res.json(task);
+  })
+);
+
+router.get(
+  "/tasks/:taskId/logs",
+  asyncHandler(async (req, res) => {
+    const taskId = Number(req.params.taskId);
+    const logs = getManagedAppTaskLogs(taskId);
+    if (!logs) {
+      return res.status(404).json({ error: "任务不存在" });
+    }
+    res.json(logs);
+  })
+);
+
+router.post(
+  "/tasks/:taskId/retry",
+  asyncHandler(async (req, res) => {
+    const taskId = Number(req.params.taskId);
+    const task = retryManagedAppTask(taskId, req.user.username);
+    res.status(202).json(task);
+  })
+);
+
+router.get(
+  "/bundles",
+  asyncHandler(async (_req, res) => {
+    res.json(listManagedBundles());
+  })
+);
+
+router.post(
+  "/bundles/:bundleId/install",
+  asyncHandler(async (req, res) => {
+    const task = createBundleInstallTask({
+      bundleId: req.params.bundleId,
+      actor: req.user.username
+    });
+    res.status(202).json(task);
   })
 );
 

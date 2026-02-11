@@ -2,7 +2,8 @@ const state = {
   token: localStorage.getItem("arknas_token") || "",
   user: null,
   page: "dashboard",
-  refreshTimer: null
+  refreshTimer: null,
+  modalTimer: null
 };
 
 const PAGE_TITLES = {
@@ -30,13 +31,22 @@ function showToast(message) {
   setTimeout(() => toastEl.classList.add("hidden"), 2500);
 }
 
+function clearModalTimer() {
+  if (state.modalTimer) {
+    clearInterval(state.modalTimer);
+    state.modalTimer = null;
+  }
+}
+
 function openModal(title, html) {
+  clearModalTimer();
   modalTitleEl.textContent = title;
   modalBodyEl.innerHTML = html;
   modalEl.classList.remove("hidden");
 }
 
 function closeModal() {
+  clearModalTimer();
   modalEl.classList.add("hidden");
   modalBodyEl.innerHTML = "";
 }
@@ -148,6 +158,7 @@ function setActiveNav(page) {
 
 async function navigate(page) {
   clearRefreshTimer();
+  closeModal();
   state.page = page;
   setPageTitle(page);
   setActiveNav(page);
@@ -584,11 +595,13 @@ async function renderDownloads() {
 
 async function renderApps() {
   try {
-    const [apps, tasks] = await Promise.all([
+    const [apps, tasks, bundles] = await Promise.all([
       api("/api/apps"),
-      api("/api/apps/tasks?limit=80")
+      api("/api/apps/tasks?limit=80"),
+      api("/api/apps/bundles")
     ]);
     const integrations = await api("/api/settings/integrations");
+    const mediaBundle = bundles.find((b) => b.id === "media-stack");
     const activeTasks = tasks.filter((t) => t.status === "queued" || t.status === "running");
     const taskByApp = new Map();
     for (const t of activeTasks) {
@@ -643,13 +656,18 @@ async function renderApps() {
       <section class="card">
         <h3>应用中心</h3>
         <p class="text-muted">可在面板内一键安装/管理 Jellyfin、qBittorrent、Portainer、Watchtower。安装参数可在“设置”页调整。</p>
+        ${
+          mediaBundle
+            ? `<div class="actions" style="margin-top: 10px;"><button class="btn btn-primary" data-bundle-install="${mediaBundle.id}">一键安装 ${mediaBundle.name}</button></div>`
+            : ""
+        }
       </section>
       <section class="grid-2">${appCards}</section>
       <section class="card">
         <h3>任务中心</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>应用</th><th>动作</th><th>状态</th><th>进度</th><th>信息</th><th>错误</th><th>时间</th></tr></thead>
+            <thead><tr><th>ID</th><th>应用</th><th>动作</th><th>状态</th><th>进度</th><th>信息</th><th>错误</th><th>时间</th><th>操作</th></tr></thead>
             <tbody>
               ${
                 tasks
@@ -663,9 +681,19 @@ async function renderApps() {
                       <td>${t.message || "-"}</td>
                       <td>${t.error_detail || "-"}</td>
                       <td>${formatDate(t.created_at)}</td>
+                      <td>
+                        <div class="actions">
+                          <button class="btn btn-secondary" data-task-action="logs" data-task-id="${t.id}">日志</button>
+                          ${
+                            t.status === "failed"
+                              ? `<button class="btn btn-danger" data-task-action="retry" data-task-id="${t.id}">重试</button>`
+                              : ""
+                          }
+                        </div>
+                      </td>
                     </tr>`
                   )
-                  .join("") || "<tr><td colspan='8'>暂无任务</td></tr>"
+                  .join("") || "<tr><td colspan='9'>暂无任务</td></tr>"
               }
             </tbody>
           </table>
@@ -692,6 +720,67 @@ async function renderApps() {
             showToast(`任务已创建 #${task.id}`);
           }
           await renderApps();
+        } catch (err) {
+          showToast(err.message);
+        }
+      });
+    });
+
+    pageContentEl.querySelectorAll("[data-bundle-install]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const bundleId = btn.dataset.bundleInstall;
+          const task = await api(`/api/apps/bundles/${bundleId}/install`, {
+            method: "POST"
+          });
+          showToast(`套件任务已创建 #${task.id}`);
+          await renderApps();
+        } catch (err) {
+          showToast(err.message);
+        }
+      });
+    });
+
+    pageContentEl.querySelectorAll("[data-task-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const action = btn.dataset.taskAction;
+        const taskId = btn.dataset.taskId;
+        try {
+          if (action === "retry") {
+            const task = await api(`/api/apps/tasks/${taskId}/retry`, { method: "POST" });
+            showToast(`重试任务已创建 #${task.id}`);
+            await renderApps();
+            return;
+          }
+
+          openModal(
+            `任务日志 #${taskId}`,
+            `<p class="text-muted">每 2 秒自动刷新，关闭弹窗后自动停止。</p><textarea id="taskLogBox" readonly></textarea>`
+          );
+
+          const textarea = document.getElementById("taskLogBox");
+          let lastLen = 0;
+          const loadLogs = async () => {
+            const logs = await api(`/api/apps/tasks/${taskId}/logs`);
+            const text = logs.logText || "";
+            const shouldStickBottom =
+              !textarea.value ||
+              textarea.scrollTop + textarea.clientHeight + 24 >= textarea.scrollHeight ||
+              text.length < lastLen;
+            textarea.value = text;
+            lastLen = text.length;
+            if (shouldStickBottom) {
+              textarea.scrollTop = textarea.scrollHeight;
+            }
+          };
+
+          await loadLogs();
+          state.modalTimer = setInterval(() => {
+            loadLogs().catch((err) => {
+              showToast(err.message);
+              clearModalTimer();
+            });
+          }, 2000);
         } catch (err) {
           showToast(err.message);
         }

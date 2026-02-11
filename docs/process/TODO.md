@@ -26,6 +26,8 @@
 - [x] 备份恢复脚本（SQLite、配置、证书）
 - [x] 发布流程与回滚指引
 - [x] 基础自动化测试与 CI
+- [x] 应用中心任务中心（进度、失败原因、日志查看、失败重试）
+- [x] 应用中心一键安装影视套件（Jellyfin + qBittorrent + Watchtower）
 
 ## 定义完成（DoD）
 - 功能可在本地 `docker compose up -d` 运行

@@ -22,8 +22,9 @@
   - 添加磁力链接
 - 应用中心（面板内安装）
   - 一键安装 Jellyfin / qBittorrent / Portainer / Watchtower
+  - 一键安装“影视套件”（Jellyfin + qBittorrent + Watchtower）
   - 启动/停止/重启/卸载
-  - 任务中心（进度条、状态、失败原因）
+  - 任务中心（进度条、状态、失败原因、任务日志、失败重试）
   - 支持在设置页配置安装目录和端口
 - SSL 管理面板
   - Cloudflare DNS Challenge 签发证书
@@ -122,6 +123,10 @@ make test      # 运行API测试
 make smoke     # API冒烟测试
 ./scripts/manage.sh up     # 无make环境启动
 ./scripts/manage.sh ps     # 无make环境查看状态
+./scripts/manage.sh logs   # 无make环境查看日志
+cd apps/api && npm run check  # 无make环境语法检查
+cd apps/api && npm test       # 无make环境运行测试
+./scripts/smoke-api.sh        # 无make环境冒烟测试
 ```
 
 ## 备份与恢复

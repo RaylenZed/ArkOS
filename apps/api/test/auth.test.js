@@ -50,3 +50,18 @@ test("app task route should reject without token", async () => {
   const res = await request(app).get("/api/apps/tasks");
   assert.equal(res.status, 401);
 });
+
+test("app bundle route should reject without token", async () => {
+  const res = await request(app).get("/api/apps/bundles");
+  assert.equal(res.status, 401);
+});
+
+test("app task log route should reject without token", async () => {
+  const res = await request(app).get("/api/apps/tasks/1/logs");
+  assert.equal(res.status, 401);
+});
+
+test("app task retry route should reject without token", async () => {
+  const res = await request(app).post("/api/apps/tasks/1/retry");
+  assert.equal(res.status, 401);
+});

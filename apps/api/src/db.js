@@ -67,6 +67,17 @@ CREATE TABLE IF NOT EXISTS app_tasks (
 );
 `);
 
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+ensureColumn("app_tasks", "log_text", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("app_tasks", "options_json", "TEXT NOT NULL DEFAULT '{}'");
+ensureColumn("app_tasks", "retried_from", "INTEGER");
+
 function seedDefaultAdmin() {
   const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(config.adminUsername);
   if (existing) return;
