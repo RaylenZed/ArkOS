@@ -100,6 +100,13 @@ make up
 - `CLOUDFLARE_API_TOKEN`：SSL 签发必须
 - `ACME_EMAIL`：证书通知邮箱（建议填写）
 
+### 集成变量是否必填
+- `JELLYFIN_BASE_URL / JELLYFIN_API_KEY / JELLYFIN_USER_ID`：不是全局必填。
+- 仅当你要使用“影视管理”页面的数据拉取（继续观看/最近添加/会话）时必填。
+- `QBIT_BASE_URL / QBIT_USERNAME / QBIT_PASSWORD`：不是全局必填。
+- 仅当你要使用“下载管理”页面的数据拉取与任务操作时必填。
+- 若你通过“应用中心”安装 Jellyfin/qBittorrent，系统会自动写入部分默认地址，但鉴权项（Jellyfin API Key、qB 密码）仍建议在“设置”里补全。
+
 ## 安全基线
 - 不直接暴露 Docker Socket，默认使用 `docker-socket-proxy`
 - 不依赖 80/443/8080，可用高位端口访问

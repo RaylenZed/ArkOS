@@ -1,5 +1,8 @@
+const storedSessionToken = sessionStorage.getItem("arknas_token") || "";
+const storedLocalToken = localStorage.getItem("arknas_token") || "";
+
 const state = {
-  token: localStorage.getItem("arknas_token") || "",
+  token: storedSessionToken || storedLocalToken || "",
   user: null,
   page: "dashboard",
   refreshTimer: null,
@@ -134,8 +137,23 @@ function forceLogout() {
   state.token = "";
   state.user = null;
   localStorage.removeItem("arknas_token");
+  sessionStorage.removeItem("arknas_token");
   clearRefreshTimer();
   setAuthedUI(false);
+}
+
+function initLoginFormState() {
+  const usernameInput = document.querySelector('input[name="username"]');
+  const rememberInput = document.getElementById("rememberLogin");
+  const lastUser = localStorage.getItem("arknas_last_user") || "";
+  const remember = localStorage.getItem("arknas_remember") === "1";
+  if (usernameInput && lastUser) usernameInput.value = lastUser;
+  if (rememberInput) rememberInput.checked = remember;
+
+  const nodeNameEl = document.getElementById("loginNodeName");
+  if (nodeNameEl) {
+    nodeNameEl.textContent = location.hostname || "管理节点";
+  }
 }
 
 async function bootstrapAuth() {
@@ -1028,6 +1046,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   const form = new FormData(e.target);
   const username = String(form.get("username") || "").trim();
   const password = String(form.get("password") || "").trim();
+  const remember = Boolean(form.get("remember"));
 
   try {
     const data = await api("/api/auth/login", {
@@ -1039,7 +1058,15 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 
     state.token = data.token;
     state.user = data.user;
-    localStorage.setItem("arknas_token", state.token);
+    localStorage.setItem("arknas_last_user", username);
+    localStorage.setItem("arknas_remember", remember ? "1" : "0");
+    if (remember) {
+      localStorage.setItem("arknas_token", state.token);
+      sessionStorage.removeItem("arknas_token");
+    } else {
+      sessionStorage.setItem("arknas_token", state.token);
+      localStorage.removeItem("arknas_token");
+    }
     setAuthedUI(true);
     showToast(`欢迎，${state.user.username}`);
     await navigate("dashboard");
@@ -1048,4 +1075,28 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   }
 });
 
+document.getElementById("togglePasswordBtn").addEventListener("click", () => {
+  const input = document.getElementById("loginPassword");
+  if (!input) return;
+  const toText = input.type === "password";
+  input.type = toText ? "text" : "password";
+  document.getElementById("togglePasswordBtn").textContent = toText ? "隐藏" : "显示";
+});
+
+document.getElementById("forgotPasswordBtn").addEventListener("click", () => {
+  openModal(
+    "重置管理员密码",
+    `<div class="list">
+      <div class="list-item">
+        <div class="list-title">服务器执行以下命令：</div>
+        <textarea readonly>cd ~/arknas-hub
+./scripts/manage.sh reset-admin-password 'NewStrongPassword123' admin
+./scripts/manage.sh restart</textarea>
+      </div>
+      <div class="text-muted">密码至少 8 位。该操作会更新数据库中的管理员密码。</div>
+    </div>`
+  );
+});
+
+initLoginFormState();
 bootstrapAuth();

@@ -36,19 +36,34 @@
 
     <div id="loginOverlay" class="login-overlay">
       <form id="loginForm" class="login-card">
-        <h1>ArkNAS Hub</h1>
-        <p>请登录管理面板</p>
-        <label>
-          用户名
-          <input name="username" placeholder="admin" required />
+        <div class="login-head">
+          <div class="login-logo">
+            <span class="login-logo-mark">方</span>
+          </div>
+          <h1>ArkNAS Hub</h1>
+          <p id="loginNodeName">管理节点</p>
+        </div>
+        <label class="login-field">
+          <span>用户名</span>
+          <input name="username" placeholder="admin" autocomplete="username" required />
         </label>
-        <label>
-          密码
-          <input name="password" type="password" placeholder="请输入密码" required />
+        <label class="login-field">
+          <span>密码</span>
+          <div class="password-wrap">
+            <input id="loginPassword" name="password" type="password" placeholder="请输入密码" autocomplete="current-password" required />
+            <button id="togglePasswordBtn" type="button" class="text-btn">显示</button>
+          </div>
         </label>
+        <div class="login-row">
+          <label class="remember">
+            <input id="rememberLogin" name="remember" type="checkbox" />
+            <span>保持登录</span>
+          </label>
+          <button id="forgotPasswordBtn" type="button" class="text-btn">忘记密码?</button>
+        </div>
         <button type="submit" class="btn btn-primary full">登录</button>
-        <p class="hint">默认账号仅首次初始化时从环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 写入。</p>
-        <p class="hint">公网访问请使用 HTTPS，HTTP 下密码会在传输链路中明文可见。</p>
+        <p class="hint">管理员密码只在首次初始化时由 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 写入。</p>
+        <p class="hint">公网访问请使用 HTTPS（HTTP 会暴露传输内容）。</p>
       </form>
     </div>
 
