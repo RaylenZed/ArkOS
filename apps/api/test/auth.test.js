@@ -40,3 +40,8 @@ test("auth protected route should reject without token", async () => {
   const res = await request(app).get("/api/settings/integrations");
   assert.equal(res.status, 401);
 });
+
+test("app center route should reject without token", async () => {
+  const res = await request(app).get("/api/apps");
+  assert.equal(res.status, 401);
+});

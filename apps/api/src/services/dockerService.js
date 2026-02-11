@@ -16,7 +16,7 @@ function createDockerClient() {
   });
 }
 
-const docker = createDockerClient();
+export const docker = createDockerClient();
 
 function classifyContainerState(raw) {
   const state = raw.State || raw.state || "unknown";

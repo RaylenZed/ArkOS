@@ -10,6 +10,7 @@ const PAGE_TITLES = {
   containers: "容器管理",
   media: "影视管理",
   downloads: "下载管理",
+  apps: "应用中心",
   ssl: "SSL 管理",
   settings: "设置"
 };
@@ -160,6 +161,8 @@ async function navigate(page) {
     await renderMedia();
   } else if (page === "downloads") {
     await renderDownloads();
+  } else if (page === "apps") {
+    await renderApps();
   } else if (page === "ssl") {
     await renderSSL();
   } else if (page === "settings") {
@@ -578,6 +581,82 @@ async function renderDownloads() {
   }
 }
 
+async function renderApps() {
+  try {
+    const apps = await api("/api/apps");
+    const integrations = await api("/api/settings/integrations");
+
+    const appCards = apps
+      .map((app) => {
+        const statusText = app.installed
+          ? app.running
+            ? "运行中"
+            : "已安装（未运行）"
+          : "未安装";
+
+        const openUrl =
+          app.id === "jellyfin"
+            ? `http://${location.hostname}:${integrations.jellyfinHostPort}`
+            : `http://${location.hostname}:${integrations.qbWebPort}`;
+
+        return `
+          <div class="card">
+            <h3>${app.name}</h3>
+            <p class="text-muted">容器名：${app.containerName}</p>
+            <p>状态：${statusText}</p>
+            <div class="actions">
+              ${
+                !app.installed
+                  ? `<button class="btn btn-primary" data-app-action="install" data-app-id="${app.id}">安装</button>`
+                  : `
+                    <button class="btn btn-secondary" data-app-action="start" data-app-id="${app.id}">启动</button>
+                    <button class="btn btn-secondary" data-app-action="stop" data-app-id="${app.id}">停止</button>
+                    <button class="btn btn-secondary" data-app-action="restart" data-app-id="${app.id}">重启</button>
+                    <button class="btn btn-danger" data-app-action="uninstall" data-app-id="${app.id}">卸载</button>
+                    <a class="btn btn-secondary" href="${openUrl}" target="_blank">打开</a>
+                  `
+              }
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    pageContentEl.innerHTML = `
+      <section class="card">
+        <h3>应用中心</h3>
+        <p class="text-muted">可在面板内一键安装/管理 Jellyfin 与 qBittorrent。安装参数可在“设置”页调整。</p>
+      </section>
+      <section class="grid-2">${appCards}</section>
+    `;
+
+    pageContentEl.querySelectorAll("[data-app-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const action = btn.dataset.appAction;
+        const appId = btn.dataset.appId;
+        try {
+          if (action === "install") {
+            await api(`/api/apps/${appId}/install`, { method: "POST" });
+          } else if (action === "uninstall") {
+            const removeData = confirm("是否同时删除应用数据目录？");
+            await api(`/api/apps/${appId}?removeData=${removeData ? "1" : "0"}`, {
+              method: "DELETE"
+            });
+          } else {
+            await api(`/api/apps/${appId}/${action}`, { method: "POST" });
+          }
+          showToast("操作成功");
+          await renderApps();
+        } catch (err) {
+          showToast(err.message);
+        }
+      });
+    });
+  } catch (err) {
+    pageContentEl.innerHTML = `<div class="card">加载失败：${err.message}</div>`;
+  }
+}
+
 async function renderSSL() {
   try {
     const certs = await api("/api/ssl/certs");
@@ -699,6 +778,12 @@ async function renderSettings() {
           <label>qB 地址<input id="s_qbBaseUrl" value="${integrations.qbBaseUrl || ""}" placeholder="http://qbittorrent:8080" /></label>
           <label>qB 用户名<input id="s_qbUsername" value="${integrations.qbUsername || ""}" /></label>
           <label>qB 密码<input id="s_qbPassword" value="${integrations.qbPassword || ""}" /></label>
+          <label>媒体目录<input id="s_mediaPath" value="${integrations.mediaPath || "/srv/media"}" placeholder="/srv/media" /></label>
+          <label>下载目录<input id="s_downloadsPath" value="${integrations.downloadsPath || "/srv/downloads"}" placeholder="/srv/downloads" /></label>
+          <label>Docker 数据目录<input id="s_dockerDataPath" value="${integrations.dockerDataPath || "/srv/docker"}" placeholder="/srv/docker" /></label>
+          <label>Jellyfin 对外端口<input id="s_jellyfinHostPort" type="number" value="${integrations.jellyfinHostPort || 18096}" /></label>
+          <label>qB Web 端口<input id="s_qbWebPort" type="number" value="${integrations.qbWebPort || 18080}" /></label>
+          <label>qB Peer 端口(TCP/UDP)<input id="s_qbPeerPort" type="number" value="${integrations.qbPeerPort || 16881}" /></label>
         </div>
         <div class="actions" style="margin-top: 10px;">
           <button id="saveSettingsBtn" class="btn btn-primary">保存设置</button>
@@ -730,7 +815,13 @@ async function renderSettings() {
           jellyfinUserId: document.getElementById("s_jellyfinUserId").value.trim(),
           qbBaseUrl: document.getElementById("s_qbBaseUrl").value.trim(),
           qbUsername: document.getElementById("s_qbUsername").value.trim(),
-          qbPassword: document.getElementById("s_qbPassword").value.trim()
+          qbPassword: document.getElementById("s_qbPassword").value.trim(),
+          mediaPath: document.getElementById("s_mediaPath").value.trim(),
+          downloadsPath: document.getElementById("s_downloadsPath").value.trim(),
+          dockerDataPath: document.getElementById("s_dockerDataPath").value.trim(),
+          jellyfinHostPort: Number(document.getElementById("s_jellyfinHostPort").value || 18096),
+          qbWebPort: Number(document.getElementById("s_qbWebPort").value || 18080),
+          qbPeerPort: Number(document.getElementById("s_qbPeerPort").value || 16881)
         };
 
         await api("/api/settings/integrations", {

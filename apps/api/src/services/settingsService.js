@@ -7,12 +7,24 @@ const INTEGRATION_KEYS = [
   "jellyfinUserId",
   "qbBaseUrl",
   "qbUsername",
-  "qbPassword"
+  "qbPassword",
+  "mediaPath",
+  "downloadsPath",
+  "dockerDataPath",
+  "jellyfinHostPort",
+  "qbWebPort",
+  "qbPeerPort"
 ];
 
 function getSetting(key, fallback = "") {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
   return row ? row.value : fallback;
+}
+
+function getNumberSetting(key, fallback) {
+  const raw = getSetting(key, fallback);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : Number(fallback);
 }
 
 export function getIntegrations() {
@@ -22,7 +34,13 @@ export function getIntegrations() {
     jellyfinUserId: getSetting("jellyfinUserId", config.jellyfinUserId),
     qbBaseUrl: getSetting("qbBaseUrl", config.qbBaseUrl),
     qbUsername: getSetting("qbUsername", config.qbUsername),
-    qbPassword: getSetting("qbPassword", config.qbPassword ? "******" : "")
+    qbPassword: getSetting("qbPassword", config.qbPassword ? "******" : ""),
+    mediaPath: getSetting("mediaPath", config.mediaPath),
+    downloadsPath: getSetting("downloadsPath", config.downloadsPath),
+    dockerDataPath: getSetting("dockerDataPath", config.dockerDataPath),
+    jellyfinHostPort: getNumberSetting("jellyfinHostPort", config.jellyfinHostPort),
+    qbWebPort: getNumberSetting("qbWebPort", config.qbWebPort),
+    qbPeerPort: getNumberSetting("qbPeerPort", config.qbPeerPort)
   };
 }
 
@@ -33,7 +51,13 @@ export function getRawIntegrationConfig() {
     jellyfinUserId: getSetting("jellyfinUserId", config.jellyfinUserId),
     qbBaseUrl: getSetting("qbBaseUrl", config.qbBaseUrl),
     qbUsername: getSetting("qbUsername", config.qbUsername),
-    qbPassword: getSetting("qbPassword", config.qbPassword)
+    qbPassword: getSetting("qbPassword", config.qbPassword),
+    mediaPath: getSetting("mediaPath", config.mediaPath),
+    downloadsPath: getSetting("downloadsPath", config.downloadsPath),
+    dockerDataPath: getSetting("dockerDataPath", config.dockerDataPath),
+    jellyfinHostPort: getNumberSetting("jellyfinHostPort", config.jellyfinHostPort),
+    qbWebPort: getNumberSetting("qbWebPort", config.qbWebPort),
+    qbPeerPort: getNumberSetting("qbPeerPort", config.qbPeerPort)
   };
 }
 

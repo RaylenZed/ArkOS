@@ -13,6 +13,7 @@ import downloadRoutes from "./routes/downloadRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import sslRoutes from "./routes/sslRoutes.js";
 import systemRoutes from "./routes/systemRoutes.js";
+import appsRoutes from "./routes/appsRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -64,7 +65,8 @@ export function createApp() {
         "jellyfin",
         "qbittorrent",
         "ssl-management",
-        "audit-log"
+        "audit-log",
+        "app-center"
       ]
     });
   });
@@ -77,6 +79,7 @@ export function createApp() {
   app.use("/api/settings", settingsRoutes);
   app.use("/api/ssl", sslRoutes);
   app.use("/api/system", systemRoutes);
+  app.use("/api/apps", appsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

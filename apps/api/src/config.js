@@ -27,6 +27,12 @@ export const config = {
   qbBaseUrl: process.env.QBIT_BASE_URL || "",
   qbUsername: process.env.QBIT_USERNAME || "",
   qbPassword: process.env.QBIT_PASSWORD || "",
+  mediaPath: process.env.MEDIA_PATH || "/srv/media",
+  downloadsPath: process.env.DOWNLOADS_PATH || "/srv/downloads",
+  dockerDataPath: process.env.DOCKER_DATA_PATH || "/srv/docker",
+  jellyfinHostPort: Number(process.env.JELLYFIN_HOST_PORT || 18096),
+  qbWebPort: Number(process.env.QBIT_WEB_PORT || 18080),
+  qbPeerPort: Number(process.env.QBIT_PEER_PORT || 16881),
   certsDir: process.env.CERTS_DIR || path.resolve(process.cwd(), "data/certs"),
   acmeEmail: process.env.ACME_EMAIL || "",
   acmeDirectory:

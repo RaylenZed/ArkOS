@@ -20,6 +20,10 @@
   - 下载任务列表（状态、进度、速度、ETA）
   - 暂停/继续/删除
   - 添加磁力链接
+- 应用中心（面板内安装）
+  - 一键安装 Jellyfin / qBittorrent
+  - 启动/停止/重启/卸载
+  - 支持在设置页配置安装目录和端口
 - SSL 管理面板
   - Cloudflare DNS Challenge 签发证书
   - 证书续期、路由绑定、下载
@@ -63,6 +67,11 @@ cp .env.example .env
 make up
 ```
 
+如果服务器没有 `make`：
+```bash
+./scripts/manage.sh up
+```
+
 ### 4) 访问
 - Web: `http://<服务器IP>:24443`
 - API Health: `http://<服务器IP>:24443/api/health`
@@ -76,6 +85,8 @@ make up
 - `DOCKER_HOST`：已默认走 `docker-socket-proxy`
 - `JELLYFIN_*`：影视模块配置
 - `QBIT_*`：下载模块配置
+- `MEDIA_PATH` / `DOWNLOADS_PATH` / `DOCKER_DATA_PATH`：应用中心安装目录
+- `JELLYFIN_HOST_PORT` / `QBIT_WEB_PORT` / `QBIT_PEER_PORT`：应用中心安装端口
 - `CLOUDFLARE_API_TOKEN`：SSL 签发必须
 - `ACME_EMAIL`：证书通知邮箱（建议填写）
 
@@ -105,6 +116,8 @@ make restore BACKUP=./backups/<file>.tar.gz  # 恢复备份
 make check     # 语法与compose校验
 make test      # 运行API测试
 make smoke     # API冒烟测试
+./scripts/manage.sh up     # 无make环境启动
+./scripts/manage.sh ps     # 无make环境查看状态
 ```
 
 ## 备份与恢复
