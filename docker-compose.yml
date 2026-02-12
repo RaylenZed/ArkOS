@@ -41,7 +41,7 @@ services:
       - PUID=${PUID}
       - PGID=${PGID}
     volumes:
-      - ${OPENLIST_DATA}:/opt/alist/data
+      - ${OPENLIST_DATA}:/opt/openlist/data
     ports:
       - "127.0.0.1:25244:5244"
     labels:
@@ -97,6 +97,8 @@ services:
       - --cleanup
       - --interval
       - "86400"
+    environment:
+      - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
