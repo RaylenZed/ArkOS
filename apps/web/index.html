@@ -49,7 +49,7 @@
           <div class="login-logo">
             <span class="login-logo-mark">方</span>
           </div>
-          <h1>ArkNAS Hub</h1>
+          <h1 id="loginTitle">ArkNAS Hub</h1>
           <p id="loginNodeName">管理节点</p>
         </div>
         <label class="login-field">
@@ -63,16 +63,16 @@
             <button id="togglePasswordBtn" type="button" class="text-btn">显示</button>
           </div>
         </label>
-        <div class="login-row">
+        <div id="loginAssistRow" class="login-row">
           <label class="remember">
             <input id="rememberLogin" name="remember" type="checkbox" />
             <span>保持登录</span>
           </label>
           <button id="forgotPasswordBtn" type="button" class="text-btn">忘记密码?</button>
         </div>
-        <button type="submit" class="btn btn-primary full">登录</button>
-        <p class="hint">管理员密码只在首次初始化时由 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 写入。</p>
-        <p class="hint">登录会使用公钥加密提交；建议公网始终使用 HTTPS。</p>
+        <button id="loginSubmitBtn" type="submit" class="btn btn-primary full">登录</button>
+        <p id="loginHintPrimary" class="hint">首次启动请先创建管理员账号（admin）。</p>
+        <p id="loginHintSecondary" class="hint">登录会优先使用公钥加密；公网场景请务必启用 HTTPS。</p>
       </form>
     </div>
 

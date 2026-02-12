@@ -8,8 +8,7 @@ process.env.CERTS_DIR = `/tmp/arknas-test-${unique}/certs`;
 process.env.JWT_SECRET = "test-secret";
 process.env.FORCE_HTTPS_AUTH = "0";
 process.env.ALLOW_PLAINTEXT_LOGIN = "1";
-process.env.ADMIN_USERNAME = "admin";
-process.env.ADMIN_PASSWORD = "admin123";
+process.env.SEED_ADMIN_FROM_ENV = "0";
 process.env.DOCKER_HOST = "tcp://127.0.0.1:23750";
 
 const { createApp } = await import("../src/app.js");
@@ -21,10 +20,22 @@ test("health endpoint should return ok", async () => {
   assert.equal(res.body.ok, true);
 });
 
-test("login and me should work with seeded admin", async () => {
+test("bootstrap admin then login and me should work", async () => {
+  const statusBefore = await request(app).get("/api/auth/bootstrap-status");
+  assert.equal(statusBefore.status, 200);
+  assert.equal(statusBefore.body.bootstrapRequired, true);
+
+  const bootstrap = await request(app)
+    .post("/api/auth/bootstrap")
+    .send({ username: "admin", password: "admin12345", confirmPassword: "admin12345" });
+
+  assert.equal(bootstrap.status, 200);
+  assert.equal(bootstrap.body.initialized, true);
+  assert.equal(bootstrap.body.user.username, "admin");
+
   const login = await request(app)
     .post("/api/auth/login")
-    .send({ username: "admin", password: "admin123" });
+    .send({ username: "admin", password: "admin12345" });
 
   assert.equal(login.status, 200);
   assert.ok(login.body.token);
@@ -36,6 +47,10 @@ test("login and me should work with seeded admin", async () => {
 
   assert.equal(me.status, 200);
   assert.equal(me.body.user.username, "admin");
+
+  const statusAfter = await request(app).get("/api/auth/bootstrap-status");
+  assert.equal(statusAfter.status, 200);
+  assert.equal(statusAfter.body.bootstrapRequired, false);
 });
 
 test("auth protected route should reject without token", async () => {

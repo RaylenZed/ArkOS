@@ -4,6 +4,7 @@ const storedLocalToken = localStorage.getItem("arknas_token") || "";
 const state = {
   token: storedSessionToken || storedLocalToken || "",
   user: null,
+  bootstrapRequired: false,
   page: "dashboard",
   refreshTimer: null,
   modalTimer: null,
@@ -229,7 +230,110 @@ function initLoginFormState() {
   }
 }
 
+function setLoginMode(isBootstrap) {
+  const formEl = document.getElementById("loginForm");
+  const titleEl = document.getElementById("loginTitle");
+  const assistRowEl = document.getElementById("loginAssistRow");
+  const submitBtnEl = document.getElementById("loginSubmitBtn");
+  const primaryHintEl = document.getElementById("loginHintPrimary");
+  const secondaryHintEl = document.getElementById("loginHintSecondary");
+  const passwordInput = document.getElementById("loginPassword");
+
+  if (!formEl || !submitBtnEl || !passwordInput) return;
+
+  formEl.dataset.mode = isBootstrap ? "bootstrap" : "login";
+  if (titleEl) titleEl.textContent = isBootstrap ? "初始化 ArkNAS Hub" : "ArkNAS Hub";
+  submitBtnEl.textContent = isBootstrap ? "创建管理员并登录" : "登录";
+  if (assistRowEl) assistRowEl.classList.toggle("hidden", isBootstrap);
+  passwordInput.setAttribute("autocomplete", isBootstrap ? "new-password" : "current-password");
+
+  let confirmField = document.getElementById("bootstrapConfirmField");
+  if (isBootstrap) {
+    if (!confirmField) {
+      confirmField = document.createElement("label");
+      confirmField.className = "login-field";
+      confirmField.id = "bootstrapConfirmField";
+      confirmField.innerHTML = `
+        <span>确认密码</span>
+        <input id="bootstrapConfirmPassword" name="confirmPassword" type="password" placeholder="再次输入密码" autocomplete="new-password" required />
+      `;
+      const pwdField = passwordInput.closest(".login-field");
+      if (pwdField) pwdField.insertAdjacentElement("afterend", confirmField);
+    }
+  } else if (confirmField) {
+    confirmField.remove();
+  }
+
+  if (primaryHintEl) {
+    primaryHintEl.textContent = isBootstrap
+      ? "首次安装请创建管理员账号（建议使用 admin 用户名）。"
+      : "如果忘记密码，可在服务器执行 reset-admin-password。";
+  }
+  if (secondaryHintEl) {
+    secondaryHintEl.textContent = isBootstrap
+      ? "初始化阶段支持 HTTP；公网部署请先限制访问来源。"
+      : "登录会优先使用公钥加密；公网场景请务必启用 HTTPS。";
+  }
+}
+
+async function syncBootstrapStatus() {
+  try {
+    const info = await api("/api/auth/bootstrap-status", { skipAuthHandling: true });
+    state.bootstrapRequired = Boolean(info?.bootstrapRequired);
+  } catch {
+    state.bootstrapRequired = false;
+  }
+  setLoginMode(state.bootstrapRequired);
+}
+
+function applyLoginSession(data, username, remember) {
+  state.token = data.token;
+  state.user = data.user;
+  localStorage.setItem("arknas_last_user", username);
+  localStorage.setItem("arknas_remember", remember ? "1" : "0");
+  if (remember) {
+    localStorage.setItem("arknas_token", state.token);
+    sessionStorage.removeItem("arknas_token");
+  } else {
+    sessionStorage.setItem("arknas_token", state.token);
+    localStorage.removeItem("arknas_token");
+  }
+}
+
+async function loginWithBestEffort(username, password) {
+  try {
+    const encryptedPayload = await encryptLoginPassword(password);
+    return await api("/api/auth/login", {
+      skipAuthHandling: true,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, ...encryptedPayload })
+    });
+  } catch (encErr) {
+    const message = String(encErr?.message || "");
+    const shouldTryInsecureFallback =
+      location.protocol === "http:" &&
+      (message.includes("无法解密登录凭据") || message.includes("all decrypt modes failed"));
+    if (!shouldTryInsecureFallback) throw encErr;
+
+    const data = await api("/api/auth/login", {
+      skipAuthHandling: true,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    showToast("已启用兼容登录，建议尽快配置 HTTPS");
+    return data;
+  }
+}
+
 async function bootstrapAuth() {
+  await syncBootstrapStatus();
+  if (state.bootstrapRequired) {
+    forceLogout();
+    setAuthedUI(false);
+    return;
+  }
   if (!state.token) {
     setAuthedUI(false);
     return;
@@ -2789,51 +2893,38 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   const username = String(form.get("username") || "").trim();
   const password = String(form.get("password") || "").trim();
   const remember = Boolean(form.get("remember"));
+  const mode = document.getElementById("loginForm")?.dataset.mode || "login";
 
   try {
-    let data;
-    try {
-      const encryptedPayload = await encryptLoginPassword(password);
-      data = await api("/api/auth/login", {
+    let data = null;
+    if (mode === "bootstrap") {
+      const confirmPassword = String(form.get("confirmPassword") || "").trim();
+      if (!username || !password || !confirmPassword) throw new Error("请完整填写初始化信息");
+      if (password !== confirmPassword) throw new Error("两次输入的密码不一致");
+      data = await api("/api/auth/bootstrap", {
         skipAuthHandling: true,
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, ...encryptedPayload })
+        body: JSON.stringify({ username, password, confirmPassword })
       });
-    } catch (encErr) {
-      const message = String(encErr?.message || "");
-      const shouldTryInsecureFallback =
-        location.protocol === "http:" &&
-        (message.includes("无法解密登录凭据") || message.includes("all decrypt modes failed"));
-
-      if (!shouldTryInsecureFallback) throw encErr;
-
-      data = await api("/api/auth/login", {
-        skipAuthHandling: true,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-      showToast("已使用内网兼容登录，请尽快启用 HTTPS");
-    }
-
-    state.token = data.token;
-    state.user = data.user;
-    localStorage.setItem("arknas_last_user", username);
-    localStorage.setItem("arknas_remember", remember ? "1" : "0");
-    if (remember) {
-      localStorage.setItem("arknas_token", state.token);
-      sessionStorage.removeItem("arknas_token");
+      state.bootstrapRequired = false;
+      setLoginMode(false);
+      showToast("管理员创建成功");
     } else {
-      sessionStorage.setItem("arknas_token", state.token);
-      localStorage.removeItem("arknas_token");
+      data = await loginWithBestEffort(username, password);
     }
+
+    applyLoginSession(data, username, remember);
     setAuthedUI(true);
     showToast(`欢迎，${state.user.username}`);
     await navigate("dashboard");
   } catch (err) {
     if (String(err.message || "").includes("密钥已失效")) {
       loginPublicKeyCache = null;
+    }
+    if (String(err.message || "").includes("系统尚未初始化")) {
+      state.bootstrapRequired = true;
+      setLoginMode(true);
     }
     showToast(err.message);
   }

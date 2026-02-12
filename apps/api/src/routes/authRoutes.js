@@ -1,6 +1,14 @@
 import express from "express";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { changePassword, createToken, decodeLoginPassword, getLoginPublicKey, loginUser } from "../auth.js";
+import {
+  changePassword,
+  createBootstrapAdmin,
+  createToken,
+  decodeLoginPassword,
+  getLoginPublicKey,
+  isBootstrapRequired,
+  loginUser
+} from "../auth.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { writeAudit } from "../services/auditService.js";
 import { HttpError } from "../lib/httpError.js";
@@ -8,6 +16,28 @@ import { config } from "../config.js";
 import { getAccessPorts } from "../services/systemService.js";
 
 const router = express.Router();
+
+function isSecureRequest(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "").toLowerCase();
+  return req.secure || proto === "https";
+}
+
+function getForceHttpsAuthFlag() {
+  const accessPorts = getAccessPorts();
+  return Boolean(accessPorts.forceHttpsAuth || config.forceHttpsAuth);
+}
+
+router.get(
+  "/bootstrap-status",
+  asyncHandler(async (_req, res) => {
+    const initialized = !isBootstrapRequired();
+    res.json({
+      initialized,
+      bootstrapRequired: !initialized,
+      forceHttpsAuth: getForceHttpsAuthFlag()
+    });
+  })
+);
 
 router.get(
   "/public-key",
@@ -17,22 +47,39 @@ router.get(
 );
 
 router.post(
+  "/bootstrap",
+  asyncHandler(async (req, res) => {
+    if (!isBootstrapRequired()) {
+      throw new HttpError(409, "系统已初始化，不能重复创建管理员");
+    }
+
+    const { username, password, confirmPassword } = req.body || {};
+    if (String(password || "") !== String(confirmPassword || "")) {
+      throw new HttpError(400, "两次输入的密码不一致");
+    }
+
+    const user = createBootstrapAdmin(username, password);
+    const token = createToken(user);
+    writeAudit({ action: "bootstrap_admin_created", actor: user.username, target: "auth", status: "ok" });
+    res.json({ token, user, initialized: true });
+  })
+);
+
+router.post(
   "/login",
   asyncHandler(async (req, res) => {
-    const accessPorts = getAccessPorts();
-    const forceHttpsAuth = accessPorts.forceHttpsAuth || config.forceHttpsAuth;
+    if (isBootstrapRequired()) {
+      throw new HttpError(409, "系统尚未初始化，请先创建管理员账号");
+    }
+
+    const forceHttpsAuth = getForceHttpsAuthFlag();
+    const isSecure = isSecureRequest(req);
     if (forceHttpsAuth) {
-      const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "").toLowerCase();
-      const isSecure = req.secure || proto === "https";
       if (!isSecure) {
         throw new HttpError(400, "当前服务要求 HTTPS 登录，请使用 https:// 访问面板");
       }
     }
 
-    const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "").toLowerCase();
-    const isSecure = req.secure || proto === "https";
-    // Bootstrap mode: when HTTPS is not enforced, allow plaintext login payload on HTTP
-    // as a compatibility fallback. In production/public access, enable FORCE_HTTPS_AUTH.
     const allowPlaintextOnThisRequest = config.allowPlainLoginPayload || (!forceHttpsAuth && !isSecure);
 
     const { username, password, passwordEncrypted, keyId, algorithm } = req.body || {};
