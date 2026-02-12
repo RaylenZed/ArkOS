@@ -1,188 +1,318 @@
-# 方舟 NAS 中控台（ArkNAS Hub）
+# ArkMedia Stack
 
-基于 Debian + Docker 的 NAS 统一管理面板，聚合 Docker、Jellyfin、qBittorrent，支持 Cloudflare DNS 自动 SSL 管理与安全公网访问。
+一个专注家庭影音的极简生产方案：
 
-## 功能概览
-- 统一总览 Dashboard
-  - 容器运行统计（总数/运行/停止/异常）
-  - Jellyfin 活跃播放、继续观看、最近添加
-  - qBittorrent 下载状态与实时速率
-  - CPU/内存/磁盘/网络状态
-- 容器管理
-  - 容器列表、端口映射、状态
-  - 启动/停止/重启
-  - 最近日志查看
-  - 拉取镜像与可选重建更新
-  - Compose 创建向导（粘贴/已有文件）、项目启停重启、项目删除
-  - 镜像仓库设置（加速器/代理/Insecure Registry）
-- 影视管理（Jellyfin API）
-  - 继续观看、最近添加、活跃会话
-  - 一键触发媒体库刷新
-- 下载管理（qBittorrent API）
-  - 下载任务列表（状态、进度、速度、ETA）
-  - 暂停/继续/删除
-  - 添加磁力链接 / 飞牛分享链接 / NAS 种子路径 / 本地种子文件
-- 应用中心（面板内安装）
-  - 一键安装 Jellyfin / qBittorrent / Portainer / Watchtower
-  - 一键安装“影视套件”（Jellyfin + qBittorrent + Watchtower）
-  - 启动/停止/重启/卸载
-  - 任务中心（进度条、状态、失败原因、任务日志、失败重试、重试来源）
-  - 安装/重启后自动验收（容器状态 + 服务就绪检测）
-  - 支持在设置页配置安装目录和端口
-- SSL 管理面板
-  - Cloudflare DNS Challenge 签发证书
-  - 证书续期、路由绑定、下载
-  - 自动续期任务（每天 03:00，临近到期自动续签）
-- 设置与安全
-  - 集成配置页面（Jellyfin/qB）
-  - 用户配额、存储空间与缓存加速
-  - 网卡 IPv4/IPv6 编辑（含可选宿主写入）
-  - 远程访问、DDNS、外链分享
-  - 共享协议（SMB/WebDAV/FTP/NFS/DLNA）开关与端口
-  - 访问端口与强制 HTTPS 登录策略
-  - 审计日志（登录、容器、下载、SSL、设置变更）
+- OpenList（外部网盘聚合）
+- Jellyfin（媒体库与播放）
+- qBittorrent（下载）
+- Watchtower（自动更新）
+- Traefik + Cloudflare DNS（HTTPS 自动证书）
+- rclone mount（把网盘挂载成宿主机目录）
 
-## 项目结构
+适配你的实际场景：不开放 80/443/8080，只使用高位端口（默认 8443）。
+
+---
+
+## 1. 项目定位
+
+这个仓库不再是完整 NAS 面板开发项目，而是可直接落地的一键部署方案。
+
+推荐使用路径：
+
+- 项目目录：`/srv/arkstack`
+- 本地媒体：`/srv/media/local`
+- 下载目录：`/srv/downloads`
+- 网盘挂载根：`/srv/cloud`
+
+---
+
+## 2. 目录结构
+
 ```text
 .
-├── apps
-│   ├── api
-│   └── web
-├── docs
-│   ├── planning
-│   └── process
-├── infra
-│   └── docker-compose.yml
 ├── .env.example
-└── Makefile
+├── docker-compose.yml
+├── README.md
+└── systemd
+    ├── rclone-openlist-drive@.service
+    └── rclone-openlist-root.service
 ```
 
-## 快速开始
-### 1) 准备环境
-- Docker / Docker Compose
-- Debian/Ubuntu/macOS 均可（建议 Linux 服务器）
+---
 
-### 2) 配置环境变量
+## 3. 先决条件（Debian）
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin rclone fuse3 curl
+sudo systemctl enable --now docker
+```
+
+启用 FUSE 的 `allow_other`：
+
+```bash
+sudo sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf
+```
+
+---
+
+## 4. 初始化部署
+
+```bash
+cd /srv
+sudo mkdir -p arkstack
+cd /srv/arkstack
+# 将本仓库内容放到这里
+```
+
+复制环境变量模板：
+
 ```bash
 cp .env.example .env
 ```
 
-至少修改：
-- `JWT_SECRET`
-- `CLOUDFLARE_API_TOKEN`（如果需要 SSL 签发）
+按需修改 `.env`：
 
-### 3) 启动
+- `BASE_DOMAIN`
+- `ACME_EMAIL`
+- `CF_DNS_API_TOKEN`
+- 路径变量（默认值可直接用）
+
+创建宿主机目录：
+
 ```bash
-make up
+sudo mkdir -p /srv/docker/{traefik,openlist,jellyfin/config,jellyfin/cache,qbittorrent}
+sudo mkdir -p /srv/media/{local,incoming}
+sudo mkdir -p /srv/downloads
+sudo mkdir -p /srv/cloud
+sudo mkdir -p /var/cache/rclone
+sudo touch /srv/docker/traefik/acme.json
+sudo chmod 600 /srv/docker/traefik/acme.json
 ```
 
-如果服务器没有 `make`：
+启动：
+
 ```bash
-./scripts/manage.sh up
+docker compose up -d
+docker compose ps
 ```
 
-### 4) 访问
-- Web: `http://<服务器IP>:24443`（建议公网改为 `https://<域名>:端口`）
-- API Health: `http://<服务器IP>:24443/api/health`
+---
 
-首次初始化：
-- 首次访问登录页时，系统会进入“创建管理员”模式。
-- 你在页面填写用户名和密码后，自动创建第一个 `admin` 并登录。
-- 不再要求先在 `.env` 中填写 `ADMIN_USERNAME/ADMIN_PASSWORD`。
+## 5. 域名与 HTTPS（Cloudflare）
 
-## 关键配置说明
-- `PUBLIC_PORT`：对外端口（默认 `24443`）
-- `DOCKER_HOST`：已默认走 `docker-socket-proxy`
-- `JELLYFIN_*`：影视模块配置
-- `QBIT_*`：下载模块配置
-- `MEDIA_PATH` / `DOWNLOADS_PATH` / `DOCKER_DATA_PATH`：应用中心安装目录
-- `JELLYFIN_HOST_PORT` / `QBIT_WEB_PORT` / `QBIT_PEER_PORT`：应用中心安装端口
-- `PORTAINER_HOST_PORT`：Portainer 端口
-- `WATCHTOWER_INTERVAL`：Watchtower 轮询秒数
-- `ARKNAS_INTERNAL_NETWORK`：应用中心容器接入的内部网络名
-- `CLOUDFLARE_API_TOKEN`：SSL 签发必须
-- `ACME_EMAIL`：证书通知邮箱（建议填写）
-- `FORCE_HTTPS_AUTH`：默认 `0`，是否强制 HTTPS 登录（可在设置页改）
-- 当 `FORCE_HTTPS_AUTH=0` 且当前请求为 HTTP 时，系统会自动启用一次“引导兼容登录”兜底
-- 公网场景仍建议开启 `FORCE_HTTPS_AUTH=1`，并通过 HTTPS 访问
-- `COMPOSE_PROJECTS_DIR`：Compose 向导项目存放目录
-- `ARKNAS_ALLOW_HOST_SERVICE_CONTROL`：允许对宿主服务执行 systemctl/service（默认开）
-- `ARKNAS_ALLOW_HOST_NETWORK_APPLY`：允许写入宿主网卡（默认开）
-- `ARKNAS_HOST_EXEC_MODE`：宿主执行模式，默认 `nsenter`
+在 Cloudflare DNS 中添加到 VPS 的 A 记录：
 
-### 集成变量是否必填
-- `JELLYFIN_BASE_URL / JELLYFIN_API_KEY / JELLYFIN_USER_ID`：不是全局必填。
-- 仅当你要使用“影视管理”页面的数据拉取（继续观看/最近添加/会话）时必填。
-- `QBIT_BASE_URL / QBIT_USERNAME / QBIT_PASSWORD`：不是全局必填。
-- 仅当你要使用“下载管理”页面的数据拉取与任务操作时必填。
-- 若你通过“应用中心”安装 Jellyfin/qBittorrent，系统会自动写入部分默认地址，但鉴权项（Jellyfin API Key、qB 密码）仍建议在“设置”里补全。
-- 当前默认值：
-  `JELLYFIN_BASE_URL=http://arknas-jellyfin:8096`
-  `QBIT_BASE_URL=http://arknas-qbittorrent:18080`
-  `QBIT_USERNAME=admin`
-  `QBIT_PASSWORD=adminadmin`
+- `jf.<BASE_DOMAIN>` -> VPS IP
+- `qb.<BASE_DOMAIN>` -> VPS IP
+- `ol.<BASE_DOMAIN>` -> VPS IP
 
-## 安全基线
-- 不直接暴露 Docker Socket，默认使用 `docker-socket-proxy`
-- 不依赖 80/443/8080，可用高位端口访问
-- 关键操作有审计日志
-- 登录支持公钥加密提交（默认禁止明文密码字段）
-- 建议公网场景叠加 VPN/Zero Trust、WAF、Fail2ban/CrowdSec
-- 浏览器 DevTools 的 Network 面板会显示请求体（即使是 HTTPS）；安全性取决于传输链路是否 HTTPS。
+访问地址（示例端口 8443）：
 
-## 宿主管理说明
-- 系统设置中的 SSH、防火墙、共享协议、网卡配置是“宿主执行”能力，不是容器内模拟开关。
-- 默认使用 `nsenter` 模式在宿主命名空间执行命令（`ARKNAS_HOST_EXEC_MODE=nsenter`）。
-- `infra/docker-compose.yml` 已为 `api` 服务设置 `pid: host` 与必要能力（`SYS_ADMIN`, `NET_ADMIN`）。
-- 若你不希望面板具备宿主执行能力，请将：
-  - `ARKNAS_ALLOW_HOST_SERVICE_CONTROL=0`
-  - `ARKNAS_ALLOW_HOST_NETWORK_APPLY=0`
+- Jellyfin: `https://jf.example.com:8443`
+- qBittorrent: `https://qb.example.com:8443`
+- OpenList: `https://ol.example.com:8443`
 
-## 文档
-- 需求说明：`docs/planning/SRS.zh-CN.md`
-- PRD：`docs/planning/PRD.zh-CN.md`
-- 飞牛功能对照清单：`docs/planning/FNOS-Feature-Checklist.zh-CN.md`
-- 公网部署方案：`docs/planning/Deployment-Security.zh-CN.md`
-- 开发 TODO：`docs/process/TODO.md`
-- 开发规范：`docs/process/DEVELOPMENT-WORKFLOW.md`
-- 发布与回滚：`docs/process/RELEASE-RUNBOOK.md`
+说明：
 
-## 命令
+- 证书通过 DNS-01 签发，不依赖 80/443 入站。
+- 你只需开放 `HTTPS_PORT`（默认 8443）和 qB BT 端口（默认 16881 TCP/UDP）。
+
+---
+
+## 6. OpenList 与夸克接入
+
+1. 登录 OpenList。
+2. 添加存储：选择夸克驱动，按驱动文档填写参数。
+3. 创建一个专用账号用于 WebDAV（建议只读）。
+4. 确认 WebDAV 地址：`http://127.0.0.1:25244/dav`（宿主机本地访问）。
+
+> OpenList 负责“接入夸克等网盘”；
+> rclone 负责“把 OpenList WebDAV 挂成本地目录”。
+
+---
+
+## 7. rclone 配置
+
+进入交互配置：
+
 ```bash
-make up        # 启动
-make down      # 停止
-make restart   # 重建重启
-make ps        # 查看服务状态
-make logs      # 跟踪日志
-make backup    # 执行备份
-make restore BACKUP=./backups/<file>.tar.gz  # 恢复备份
-make check     # 语法与compose校验
-make test      # 运行API测试
-make smoke     # API冒烟测试
-./scripts/manage.sh up     # 无make环境启动
-./scripts/manage.sh ps     # 无make环境查看状态
-./scripts/manage.sh logs   # 无make环境查看日志
-./scripts/manage.sh reset-admin-password '<新密码>' [用户名]  # 重置本地数据库密码
-cd apps/api && npm run check  # 无make环境语法检查
-cd apps/api && npm test       # 无make环境运行测试
-./scripts/smoke-api.sh        # 无make环境冒烟测试
+rclone config
 ```
 
-## 备份与恢复
-备份：
+新建 remote（建议名 `openlist`）：
+
+- `Storage` 选 `webdav`
+- `url` 填 `http://127.0.0.1:25244/dav`
+- `vendor` 选 `other`
+- 用户名/密码填 OpenList WebDAV 账号
+
+验证：
+
 ```bash
-./scripts/backup.sh
+rclone lsd openlist:
 ```
 
-恢复（会先停止服务）：
+---
+
+## 8. 单网盘挂载方案（最简单）
+
+把 OpenList 根目录整体挂到 `/srv/cloud`：
+
 ```bash
-./scripts/restore.sh ./backups/<backup-file>.tar.gz --yes
-make up
+sudo cp systemd/rclone-openlist-root.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now rclone-openlist-root
+sudo systemctl status rclone-openlist-root
 ```
 
-## 注意事项
-- 容器“更新”默认先拉镜像；若选择“重建更新”会尝试以当前配置重建容器。
-- 对于复杂 Compose 项目，建议仍优先使用原始 Compose 工作流更新。
+验证：
 
-## License
-待补充（建议 MIT）。
+```bash
+ls -lah /srv/cloud
+```
+
+Jellyfin 里配置媒体库目录：
+
+- `/media/cloud/<你的网盘目录>/Movies`
+- `/media/cloud/<你的网盘目录>/TV`
+
+---
+
+## 9. 多网盘挂载方案（推荐生产）
+
+适合场景：夸克、阿里云盘、115、OneDrive 等分开管理，互不影响。
+
+先创建目标目录（举例）：
+
+```bash
+sudo mkdir -p /srv/cloud/{quark,alipan,onedrive}
+```
+
+安装模板服务：
+
+```bash
+sudo cp systemd/rclone-openlist-drive@.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+为每个网盘启动一个实例（实例名就是 OpenList 里的路径名）：
+
+```bash
+sudo systemctl enable --now rclone-openlist-drive@quark
+sudo systemctl enable --now rclone-openlist-drive@alipan
+sudo systemctl enable --now rclone-openlist-drive@onedrive
+```
+
+查看状态：
+
+```bash
+systemctl status rclone-openlist-drive@quark
+systemctl status rclone-openlist-drive@alipan
+systemctl status rclone-openlist-drive@onedrive
+```
+
+停止某一个：
+
+```bash
+sudo systemctl disable --now rclone-openlist-drive@onedrive
+```
+
+Jellyfin 建议按挂载点分别建库：
+
+- `/media/cloud/quark`
+- `/media/cloud/alipan`
+- `/media/cloud/onedrive`
+
+---
+
+## 10. qBittorrent 与 Jellyfin 联动建议
+
+- qB 下载目录：`/downloads`
+- 媒体整理目录：`/media/incoming`
+- Jellyfin 同时扫描：
+  - `/media/local`
+  - `/media/incoming`
+  - `/media/cloud`
+
+建议再配一个小脚本做下载完成后整理（可选）。
+
+---
+
+## 11. 常用运维命令
+
+```bash
+# 查看服务
+docker compose ps
+
+# 看日志
+docker compose logs -f openlist
+docker compose logs -f jellyfin
+docker compose logs -f qbittorrent
+
+docker compose logs -f traefik
+
+# 更新镜像并重建
+docker compose pull
+docker compose up -d
+
+# 查看挂载是否还在
+mount | grep /srv/cloud
+```
+
+---
+
+## 12. 安全建议（必须）
+
+- Cloudflare Token 仅授予必要 DNS 权限。
+- OpenList WebDAV 账号最小权限（只读优先）。
+- `25244` 只监听 `127.0.0.1`，不要暴露公网。
+- Jellyfin 的 `/media/cloud` 建议只读挂载。
+- 公网建议叠加：Fail2ban / WAF / Cloudflare Access（可选）。
+
+---
+
+## 13. 故障排查
+
+### 13.1 证书签发失败
+
+检查：
+
+- `CF_DNS_API_TOKEN` 是否有效
+- DNS 记录是否指向 VPS
+- `acme.json` 权限是否 `600`
+
+看日志：
+
+```bash
+docker compose logs -f traefik
+```
+
+### 13.2 rclone 看不到目录
+
+检查：
+
+```bash
+rclone lsd openlist:
+systemctl status rclone-openlist-root
+journalctl -u rclone-openlist-root -f
+```
+
+### 13.3 Jellyfin 看不到网盘媒体
+
+检查：
+
+- `/srv/cloud` 是否有文件
+- `docker compose exec jellyfin ls -lah /media/cloud`
+- Jellyfin 媒体库路径是否正确
+
+---
+
+## 14. 版本识别（你要求的“好判断”）
+
+这个版本的特征：
+
+- `.env.example` 不包含 `ADMIN_USERNAME / ADMIN_PASSWORD`
+- 也不包含 `SEED_ADMIN_FROM_ENV`
+- 仓库只保留“媒体栈部署文件”，不再包含旧的 NAS 面板源码
+

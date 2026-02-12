@@ -1,0 +1,20 @@
+[Unit]
+Description=Rclone Mount OpenList path %i
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rclone mount openlist:/%i /srv/cloud/%i \
+  --allow-other \
+  --umask 002 \
+  --vfs-cache-mode full \
+  --cache-dir /var/cache/rclone \
+  --dir-cache-time 10m \
+  --timeout 1h
+ExecStop=/bin/fusermount -uz /srv/cloud/%i
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

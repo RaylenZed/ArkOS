@@ -1,0 +1,116 @@
+name: arkmedia-stack
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: arkmedia-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.websecure.address=:${HTTPS_PORT}
+      - --certificatesresolvers.cf.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cf.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.cf.acme.dnschallenge=true
+      - --certificatesresolvers.cf.acme.dnschallenge.provider=cloudflare
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+    ports:
+      - "${HTTPS_PORT}:${HTTPS_PORT}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /srv/docker/traefik:/letsencrypt
+    networks:
+      - media_net
+
+  openlist:
+    image: openlistteam/openlist:latest
+    container_name: arkmedia-openlist
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ${OPENLIST_DATA}:/opt/alist/data
+    ports:
+      - "127.0.0.1:25244:5244"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.openlist.rule=Host(`ol.${BASE_DOMAIN}`)
+      - traefik.http.routers.openlist.entrypoints=websecure
+      - traefik.http.routers.openlist.tls=true
+      - traefik.http.routers.openlist.tls.certresolver=cf
+      - traefik.http.services.openlist.loadbalancer.server.port=5244
+      - com.centurylinklabs.watchtower.enable=true
+    networks:
+      - media_net
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: arkmedia-jellyfin
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ${JELLYFIN_CONFIG}:/config
+      - ${JELLYFIN_CACHE}:/cache
+      - ${MEDIA_LOCAL_PATH}:/media/local:ro
+      - ${MEDIA_INCOMING_PATH}:/media/incoming
+      - ${CLOUD_MOUNT_ROOT}:/media/cloud:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.jellyfin.rule=Host(`jf.${BASE_DOMAIN}`)
+      - traefik.http.routers.jellyfin.entrypoints=websecure
+      - traefik.http.routers.jellyfin.tls=true
+      - traefik.http.routers.jellyfin.tls.certresolver=cf
+      - traefik.http.services.jellyfin.loadbalancer.server.port=8096
+      - com.centurylinklabs.watchtower.enable=true
+    networks:
+      - media_net
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: arkmedia-qbittorrent
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=16881
+    volumes:
+      - ${QBIT_CONFIG}:/config
+      - ${DOWNLOADS_PATH}:/downloads
+      - ${MEDIA_INCOMING_PATH}:/media/incoming
+    ports:
+      - "16881:16881/tcp"
+      - "16881:16881/udp"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.qb.rule=Host(`qb.${BASE_DOMAIN}`)
+      - traefik.http.routers.qb.entrypoints=websecure
+      - traefik.http.routers.qb.tls=true
+      - traefik.http.routers.qb.tls.certresolver=cf
+      - traefik.http.services.qb.loadbalancer.server.port=8080
+      - com.centurylinklabs.watchtower.enable=true
+    networks:
+      - media_net
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: arkmedia-watchtower
+    restart: unless-stopped
+    command:
+      - --label-enable
+      - --cleanup
+      - --interval
+      - "86400"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - media_net
+
+networks:
+  media_net:
+    driver: bridge
