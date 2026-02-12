@@ -108,6 +108,7 @@ make up
 - `ACME_EMAIL`：证书通知邮箱（建议填写）
 - `FORCE_HTTPS_AUTH`：默认 `1`，强制 HTTPS 登录（可在设置页改）
 - `ALLOW_PLAINTEXT_LOGIN`：默认 `0`，禁止明文密码提交
+  - 内网纯 HTTP 调试若遇到“无法解密登录凭据”，可临时设为 `1` 作为兼容兜底，待 HTTPS 可用后务必改回 `0`
 - `COMPOSE_PROJECTS_DIR`：Compose 向导项目存放目录
 - `ARKNAS_ALLOW_HOST_SERVICE_CONTROL`：允许对宿主服务执行 systemctl/service（默认开）
 - `ARKNAS_ALLOW_HOST_NETWORK_APPLY`：允许写入宿主网卡（默认开）

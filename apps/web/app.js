@@ -2791,13 +2791,31 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   const remember = Boolean(form.get("remember"));
 
   try {
-    const encryptedPayload = await encryptLoginPassword(password);
-    const data = await api("/api/auth/login", {
-      skipAuthHandling: true,
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, ...encryptedPayload })
-    });
+    let data;
+    try {
+      const encryptedPayload = await encryptLoginPassword(password);
+      data = await api("/api/auth/login", {
+        skipAuthHandling: true,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, ...encryptedPayload })
+      });
+    } catch (encErr) {
+      const message = String(encErr?.message || "");
+      const shouldTryInsecureFallback =
+        location.protocol === "http:" &&
+        (message.includes("无法解密登录凭据") || message.includes("all decrypt modes failed"));
+
+      if (!shouldTryInsecureFallback) throw encErr;
+
+      data = await api("/api/auth/login", {
+        skipAuthHandling: true,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      showToast("已使用内网兼容登录，请尽快启用 HTTPS");
+    }
 
     state.token = data.token;
     state.user = data.user;
