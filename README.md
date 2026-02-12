@@ -9,7 +9,7 @@
 - Traefik + Cloudflare DNS（HTTPS 自动证书）
 - rclone mount（把网盘挂载成宿主机目录）
 
-适配你的实际场景：不开放 80/443/8080，只使用高位端口（默认 8443）。
+适配你的实际场景：不开放 80/443/8080，只使用高位端口（默认 8443/9443/10443）。
 
 ---
 
@@ -92,18 +92,13 @@ cp .env.example .env
 - `BASE_DOMAIN`
 - `ACME_EMAIL`
 - `CF_DNS_API_TOKEN`
+- `JELLYFIN_HTTPS_PORT / QBIT_HTTPS_PORT / OPENLIST_HTTPS_PORT`
 - 路径变量（默认值可直接用）
 
 创建宿主机目录：
 
 ```bash
-mkdir -p /srv/docker/{traefik,openlist,jellyfin/config,jellyfin/cache,qbittorrent}
-mkdir -p /srv/media/{local,incoming}
-mkdir -p /srv/downloads
-mkdir -p /srv/cloud
-mkdir -p /var/cache/rclone
-touch /srv/docker/traefik/acme.json
-chmod 600 /srv/docker/traefik/acme.json
+mkdir -p /srv/docker/{traefik,openlist,jellyfin/config,jellyfin/cache,qbittorrent} /srv/media/{local,incoming} /srv/downloads /srv/cloud /var/cache/rclone && touch /srv/docker/traefik/acme.json && chmod 600 /srv/docker/traefik/acme.json
 ```
 
 启动：
@@ -117,22 +112,21 @@ docker compose ps
 
 ## 5. 域名与 HTTPS（Cloudflare）
 
-在 Cloudflare DNS 中添加到 VPS 的 A 记录：
+在 Cloudflare DNS 中添加一个 A 记录到 VPS：
 
-- `jf.<BASE_DOMAIN>` -> VPS IP
-- `qb.<BASE_DOMAIN>` -> VPS IP
-- `ol.<BASE_DOMAIN>` -> VPS IP
+- `<BASE_DOMAIN>` -> VPS IP
 
-访问地址（示例端口 8443）：
+访问地址（同域名、不同端口）：
 
-- Jellyfin: `https://jf.example.com:8443`
-- qBittorrent: `https://qb.example.com:8443`
-- OpenList: `https://ol.example.com:8443`
+- Jellyfin: `https://pve.example.com:8443`
+- qBittorrent: `https://pve.example.com:9443`
+- OpenList: `https://pve.example.com:10443`
 
 说明：
 
 - 证书通过 DNS-01 签发，不依赖 80/443 入站。
-- 你只需开放 `HTTPS_PORT`（默认 8443）和 qB BT 端口（默认 16881 TCP/UDP）。
+- 你只需开放 `JELLYFIN_HTTPS_PORT / QBIT_HTTPS_PORT / OPENLIST_HTTPS_PORT` 和 qB BT 端口（默认 16881 TCP/UDP）。
+- 若 Cloudflare 使用橙云代理，请确认端口在 Cloudflare 支持列表内；否则使用灰云直连。
 
 ---
 
