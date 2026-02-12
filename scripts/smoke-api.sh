@@ -23,8 +23,6 @@ trap cleanup EXIT
   ARKNAS_DB_PATH="$TMP_BASE/sqlite/arknas.db" \
   CERTS_DIR="$TMP_BASE/certs" \
   JWT_SECRET="smoke-secret" \
-  ADMIN_USERNAME="admin" \
-  ADMIN_PASSWORD="admin123" \
   node src/server.js >"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
 )
@@ -32,7 +30,7 @@ trap cleanup EXIT
 sleep 2
 
 curl -sf "http://127.0.0.1:$PORT/api/health" >/dev/null
-TOKEN="$(curl -sf -X POST "http://127.0.0.1:$PORT/api/auth/login" -H 'content-type: application/json' -d '{"username":"admin","password":"admin123"}' | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>process.stdout.write(JSON.parse(d).token||""))')"
+TOKEN="$(curl -sf -X POST "http://127.0.0.1:$PORT/api/auth/bootstrap" -H 'content-type: application/json' -d '{"username":"admin","password":"admin12345","confirmPassword":"admin12345"}' | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>process.stdout.write(JSON.parse(d).token||""))')"
 
 if [[ -z "$TOKEN" ]]; then
   echo "Smoke failed: token missing"

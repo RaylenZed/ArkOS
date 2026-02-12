@@ -80,7 +80,7 @@ router.post(
       }
     }
 
-    const allowPlaintextOnThisRequest = config.allowPlainLoginPayload || (!forceHttpsAuth && !isSecure);
+    const allowPlaintextOnThisRequest = !forceHttpsAuth && !isSecure;
 
     const { username, password, passwordEncrypted, keyId, algorithm } = req.body || {};
     const finalPassword = decodeLoginPassword({

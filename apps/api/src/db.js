@@ -1,5 +1,4 @@
 import Database from "better-sqlite3";
-import bcrypt from "bcryptjs";
 import path from "node:path";
 import { config, ensureDir } from "./config.js";
 
@@ -181,28 +180,6 @@ ensureColumn("app_tasks", "log_text", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("app_tasks", "options_json", "TEXT NOT NULL DEFAULT '{}'");
 ensureColumn("app_tasks", "retried_from", "INTEGER");
 
-function seedDefaultAdmin() {
-  if (!config.seedAdminFromEnv) return;
-  if (!config.adminUsername || !config.adminPassword) return;
-  const anyUser = db.prepare("SELECT COUNT(1) AS count FROM users").get();
-  if (Number(anyUser?.count || 0) > 0) return;
-  const now = new Date().toISOString();
-  const passwordHash = bcrypt.hashSync(config.adminPassword, 10);
-  db.prepare(
-    "INSERT INTO users (username, password_hash, role, created_at, updated_at) VALUES (?, ?, 'admin', ?, ?)"
-  ).run(config.adminUsername, passwordHash, now, now);
-
-  const admin = db.prepare("SELECT id FROM users WHERE username = ?").get(config.adminUsername);
-  const administratorsGroup = db.prepare("SELECT id FROM user_groups WHERE name = 'Administrators'").get();
-  if (admin && administratorsGroup) {
-    db.prepare("INSERT OR IGNORE INTO user_group_members (user_id, group_id, created_at) VALUES (?, ?, ?)").run(
-      admin.id,
-      administratorsGroup.id,
-      now
-    );
-  }
-}
-
 function seedDefaultGroups() {
   const now = new Date().toISOString();
   const upsertGroup = db.prepare(
@@ -230,7 +207,6 @@ function seedDefaultStorageSpaces() {
 }
 
 seedDefaultGroups();
-seedDefaultAdmin();
 seedDefaultStorageSpaces();
 
 export { db };

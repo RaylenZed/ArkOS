@@ -7,8 +7,6 @@ process.env.ARKNAS_DB_PATH = `/tmp/arknas-test-${unique}/sqlite/arknas.db`;
 process.env.CERTS_DIR = `/tmp/arknas-test-${unique}/certs`;
 process.env.JWT_SECRET = "test-secret";
 process.env.FORCE_HTTPS_AUTH = "0";
-process.env.ALLOW_PLAINTEXT_LOGIN = "1";
-process.env.SEED_ADMIN_FROM_ENV = "0";
 process.env.DOCKER_HOST = "tcp://127.0.0.1:23750";
 
 const { createApp } = await import("../src/app.js");

@@ -103,10 +103,8 @@ make up
 - `CLOUDFLARE_API_TOKEN`：SSL 签发必须
 - `ACME_EMAIL`：证书通知邮箱（建议填写）
 - `FORCE_HTTPS_AUTH`：默认 `0`，是否强制 HTTPS 登录（可在设置页改）
-- `ALLOW_PLAINTEXT_LOGIN`：默认 `0`，全局明文密码提交开关（一般不建议开启）
-  - 当 `FORCE_HTTPS_AUTH=0` 且当前请求为 HTTP 时，系统会自动启用一次“引导兼容登录”兜底（不需要把该变量改为 `1`）
-  - 公网场景仍建议开启 `FORCE_HTTPS_AUTH=1`，并通过 HTTPS 访问
-- `SEED_ADMIN_FROM_ENV`：默认 `0`。若设置为 `1`，可用 `ADMIN_USERNAME/ADMIN_PASSWORD` 预置管理员（自动化场景）
+- 当 `FORCE_HTTPS_AUTH=0` 且当前请求为 HTTP 时，系统会自动启用一次“引导兼容登录”兜底
+- 公网场景仍建议开启 `FORCE_HTTPS_AUTH=1`，并通过 HTTPS 访问
 - `COMPOSE_PROJECTS_DIR`：Compose 向导项目存放目录
 - `ARKNAS_ALLOW_HOST_SERVICE_CONTROL`：允许对宿主服务执行 systemctl/service（默认开）
 - `ARKNAS_ALLOW_HOST_NETWORK_APPLY`：允许写入宿主网卡（默认开）
