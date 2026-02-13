@@ -1,23 +1,23 @@
 # ArkMedia Stack
 
-基于 Debian 的极简媒体栈：
+基于 Debian 的家用媒体栈（Caddy 入口版）：
 
-- OpenList（外部网盘聚合）
+- OpenList（网盘聚合）
 - Jellyfin（媒体库/播放）
 - qBittorrent（下载）
 - Watchtower（自动更新）
 - Caddy + Cloudflare DNS-01（自动 HTTPS）
-- rclone + systemd（把网盘挂载到宿主机目录）
+- rclone + systemd（网盘挂载到宿主机目录）
 
-目标场景：
+适配目标：
 
-- 不开 80/443/8080
-- 单域名、不同端口访问不同服务
-- 可后续扩展 Dify 等业务
+- 不开放 80/443/8080
+- 同一域名，不同端口访问不同服务
+- 后续可继续加业务（如 Dify）
 
 ---
 
-## 1. 访问模型
+## 1. 架构与访问方式
 
 统一域名示例：`pve.example.com`
 
@@ -29,12 +29,12 @@
 
 说明：
 
-- 支持你要求的“同一个域名，不同业务走不同端口”。
-- 证书由 Caddy 通过 Cloudflare DNS API 自动签发和续期。
+- 证书由 Caddy 通过 Cloudflare DNS API 自动签发与续期。
+- 本文默认你是普通用户，命令按 `sudo` 写（`cd` 不需要 `sudo`）。
 
 ---
 
-## 2. 项目文件
+## 2. 项目结构
 
 ```text
 .
@@ -43,6 +43,10 @@
 ├── Dockerfile.caddy
 ├── Caddyfile
 ├── README.md
+├── scripts
+│   ├── bootstrap.sh
+│   └── qbittorrent-init
+│       └── 10-reverse-proxy.sh
 └── systemd
     ├── rclone-openlist-root.service
     └── rclone-openlist-drive@.service
@@ -50,24 +54,17 @@
 
 ---
 
-## 3. 系统要求
+## 3. 前置要求
 
-- Debian 12/13（其他 Linux 也可）
-- Docker Engine + Docker Compose Plugin
-- 公网可访问你的自定义端口（如 8443/2053/2096）
-- Cloudflare 域名托管
-
-命令约定：
-
-- 本文默认你是普通用户，命令都按 `sudo` 写。
-- `cd` 这类 shell 内建命令不加 `sudo`。
-- 如果你本身是 `root`，可把 `sudo` 去掉。
+- Debian 12/13
+- Cloudflare 托管域名
+- 公网放行你自定义的 HTTPS 端口（示例：8443/2053/2096）
 
 ---
 
-## 4. 从零部署（可直接复制）
+## 4. 快速部署（推荐）
 
-### 4.1 安装 Docker（官方脚本）
+### 4.1 安装 Docker
 
 ```bash
 curl -fsSL https://get.docker.com -o install-docker.sh
@@ -77,7 +74,7 @@ sudo docker --version
 sudo docker compose version
 ```
 
-### 4.2 安装 rclone / fuse3
+### 4.2 安装 rclone/fuse
 
 ```bash
 sudo apt update
@@ -85,49 +82,35 @@ sudo apt install -y rclone fuse3 curl
 sudo sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf
 ```
 
-### 4.3 部署目录和配置
+### 4.3 拉取项目并准备 `.env`
 
 ```bash
 sudo mkdir -p /srv/arkstack
 sudo chown -R "$USER:$USER" /srv/arkstack
 cd /srv/arkstack
-# 把仓库文件放到当前目录（git clone 或上传）
+# git clone 后进入目录
 cp .env.example .env
 ```
 
-编辑 `.env`，至少填写：
+至少修改以下变量：
 
 - `BASE_DOMAIN=pve.example.com`
 - `ACME_EMAIL=you@example.com`
 - `CF_DNS_API_TOKEN=...`
 
-### 4.4 一条命令创建目录
+### 4.4 一键初始化目录与权限
 
 ```bash
-sudo mkdir -p /srv/docker/{caddy/data,caddy/config,openlist,jellyfin/config,jellyfin/cache,qbittorrent} /srv/media/{local,incoming} /srv/downloads /srv/cloud /var/cache/rclone
+sudo ./scripts/bootstrap.sh
 ```
 
-### 4.5 修正目录权限（很重要）
+这一步会做：
 
-```bash
-sudo chown -R 1000:1000 /srv/docker/openlist /srv/docker/qbittorrent
-sudo chmod -R u+rwX,g+rwX /srv/docker/openlist /srv/docker/qbittorrent
-```
+- 创建所有宿主机目录
+- 修复 OpenList/qBittorrent 目录权限
+- 预防 OpenList 启动时报 `/opt/openlist/data` 权限错误
 
-> 如果你在 `.env` 里改了 `PUID/PGID`，这里对应改成同样的 UID/GID。
-
-### 4.6 Cloudflare DNS
-
-在 Cloudflare 添加 A 记录：
-
-- `pve.example.com -> 你的 VPS IP`
-
-建议：
-
-- 先用灰云（DNS only）测试；
-- 如需橙云代理，优先用 Cloudflare 支持的 HTTPS 端口（8443/2053/2096 等）。
-
-### 4.7 启动
+### 4.5 启动服务
 
 ```bash
 sudo docker compose up -d --build
@@ -136,56 +119,69 @@ sudo docker compose ps
 
 ---
 
-## 5. 首次登录与初始化
+## 5. Cloudflare DNS 设置
 
-### 5.1 OpenList
+添加 A 记录：
 
-- 打开 `https://pve.example.com:2096`
-- 按页面向导创建管理员账号
-- 添加你的网盘（夸克/阿里盘/OneDrive 等）
+- `pve.example.com -> VPS IP`
 
-### 5.2 Jellyfin
+提示：
 
-- 打开 `https://pve.example.com:8443`
-- 按向导创建 Jellyfin 管理员
-- 在媒体库里添加目录（示例）：
-  - `/media/local/TV`
-  - `/media/cloud/quark/TV`
-
-### 5.3 qBittorrent
-
-- 打开 `https://pve.example.com:2053`
-- 默认用户 `admin`
-- 初始临时密码查看：
-
-```bash
-sudo docker compose logs qbittorrent | rg "temporary password"
-```
-
-登录后立刻在 qBittorrent 设置里改管理员密码。
+- 先灰云（DNS only）验证。
+- 使用橙云时，优先用 Cloudflare 支持的 HTTPS 端口（8443/2053/2096/2083/2087 等）。
 
 ---
 
-## 6. 网盘挂载（OpenList + rclone）
+## 6. 首次初始化
 
-核心逻辑：
+### 6.1 OpenList
 
-- OpenList 负责“接入网盘”
-- rclone 负责“挂载到宿主机目录”
+- 打开 `https://pve.example.com:2096`
+- 创建管理员账号
+- 添加网盘（夸克/阿里盘/OneDrive 等）
 
-### 6.1 配置 rclone remote
+### 6.2 Jellyfin
+
+- 打开 `https://pve.example.com:8443`
+- 创建管理员
+- 添加媒体库路径，例如：
+  - `/media/local/TV`
+  - `/media/cloud/quark/TV`
+
+### 6.3 qBittorrent
+
+- 打开 `https://pve.example.com:2053`
+- 用户名：`admin`
+- 临时密码查看：
+
+```bash
+sudo docker compose logs qbittorrent | rg -i "temporary password|administrator password"
+```
+
+登录后建议立即改管理员密码。
+
+---
+
+## 7. OpenList + rclone 挂载网盘
+
+核心分工：
+
+- OpenList：对接云盘
+- rclone：把云盘挂载到宿主机目录（如 `/srv/cloud`）
+
+### 7.1 配置 rclone remote
 
 ```bash
 sudo rclone config
 ```
 
-建议参数：
+建议：
 
 - name: `openlist`
 - type: `webdav`
 - url: `http://127.0.0.1:25244/dav`
 - vendor: `other`
-- user/password: OpenList 里创建的 WebDAV 账号
+- user/password: OpenList 的 WebDAV 账号
 
 验证：
 
@@ -193,7 +189,7 @@ sudo rclone config
 sudo rclone lsd openlist:
 ```
 
-### 6.2 单网盘挂载（根目录）
+### 7.2 单网盘（挂根目录）
 
 ```bash
 sudo cp systemd/rclone-openlist-root.service /etc/systemd/system/
@@ -202,7 +198,7 @@ sudo systemctl enable --now rclone-openlist-root
 sudo systemctl status rclone-openlist-root
 ```
 
-### 6.3 多网盘挂载（推荐）
+### 7.3 多网盘（推荐）
 
 ```bash
 sudo mkdir -p /srv/cloud/{quark,alipan,onedrive}
@@ -213,7 +209,7 @@ sudo systemctl enable --now rclone-openlist-drive@alipan
 sudo systemctl enable --now rclone-openlist-drive@onedrive
 ```
 
-检查：
+验证：
 
 ```bash
 sudo systemctl status rclone-openlist-drive@quark
@@ -224,35 +220,19 @@ ls -lah /srv/cloud
 
 ---
 
-## 7. 新增 SSD 并接入 Jellyfin（附加教程）
+## 8. 存储与权限模型
 
-### 7.1 查看新盘
+### 8.1 新增 SSD 并挂载
 
 ```bash
 sudo lsblk -f
-```
-
-### 7.2 格式化（仅新盘，慎用）
-
-```bash
 sudo mkfs.ext4 /dev/nvme1n1p1
-```
-
-### 7.3 挂载并加入开机自动挂载
-
-```bash
 sudo mkdir -p /mnt/ssd
 sudo mount /dev/nvme1n1p1 /mnt/ssd
 sudo blkid /dev/nvme1n1p1
 ```
 
-将 UUID 写入 `/etc/fstab`（示例）：
-
-```fstab
-UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx /mnt/ssd ext4 defaults,nofail 0 2
-```
-
-验证：
+把 UUID 写入 `/etc/fstab` 后验证：
 
 ```bash
 sudo umount /mnt/ssd
@@ -260,59 +240,29 @@ sudo mount -a
 df -h | grep /mnt/ssd
 ```
 
-### 7.4 给 Jellyfin 增加 SSD 映射
+### 8.2 Jellyfin 同时扫描多个来源
 
-编辑 `docker-compose.yml`，在 `jellyfin.volumes` 追加：
+可在同一个库里加入多个路径：
+
+- `/media/local/TV`
+- `/media/cloud/quark/TV`
+- `/media/ssd/TV`
+
+如果要增加 SSD 映射，在 `jellyfin.volumes` 追加：
 
 ```yaml
 - /mnt/ssd/media:/media/ssd:ro
 ```
 
-重启：
+然后重启 Jellyfin：
 
 ```bash
 sudo docker compose up -d jellyfin
 ```
 
-然后在 Jellyfin 库中添加多个路径，例如同一个 TV 库同时包含：
+### 8.3 同目录给多个容器
 
-- `/media/cloud/quark/TV`
-- `/media/local/TV`
-- `/media/ssd/TV`
-
----
-
-## 8. 权限与共享目录说明（你关心的点）
-
-### 8.1 挂载新磁盘会不会有权限问题？
-
-会，常见在这三种情况：
-
-- 目录 owner/group 和容器运行 UID/GID 不一致
-- 磁盘文件系统是 NTFS/exFAT，Linux 权限模型不完整
-- rclone 挂载参数缺少 `--allow-other` 或 uid/gid 映射
-
-推荐策略：
-
-- 本地数据盘优先 `ext4/xfs`
-- 统一容器用户：`PUID=1000`, `PGID=1000`
-- 对需要写入的挂载目录执行：
-
-```bash
-sudo chown -R 1000:1000 <目录>
-sudo chmod -R u+rwX,g+rwX <目录>
-```
-
-### 8.2 同一个文件夹/磁盘能给多个容器吗？
-
-可以，完全支持。
-
-推荐按“写入方/读取方”分权：
-
-- 下载器（qBittorrent）挂载 `rw`
-- 媒体库（Jellyfin）挂载 `ro`
-
-示例：
+支持，且推荐“写入方 rw、读取方 ro”：
 
 ```yaml
 qbittorrent:
@@ -324,69 +274,33 @@ jellyfin:
     - /srv/media/incoming:/media/incoming:ro
 ```
 
-这就是生产中最常见、最安全的共享方式。
+### 8.4 网盘写入策略
 
-### 8.3 把挂载网盘直接给 Jellyfin
+支持写入网盘挂载目录，但推荐：
 
-支持，当前 compose 已经包含：
+- qB 先下载到本地盘 `/srv/downloads`
+- 再用 `rclone move/copy` 推送网盘
 
-```yaml
-- ${CLOUD_MOUNT_ROOT}:/media/cloud:ro
-```
-
-也就是宿主机 `/srv/cloud`（rclone 挂载点）会映射到 Jellyfin 的 `/media/cloud`。  
-你只需要在 Jellyfin 后台给媒体库增加路径，例如：
-
-- `/media/cloud/quark/TV`
-- `/media/cloud/alipan/Movies`
-
-验证容器内是否可见：
-
-```bash
-sudo docker compose exec jellyfin ls -lah /media/cloud
-```
-
-### 8.4 网盘写入数据（可写场景）
-
-支持，但要区分两类：
-
-1. 普通文件复制/整理：可以写入网盘挂载目录（`/srv/cloud/...`）。
-2. BT 直接下载到网盘：不推荐，随机写多，容易触发云盘限速/失败。
-
-推荐方案（生产更稳）：
-
-- qBittorrent 写本地盘：`/srv/downloads`
-- 下载完成后再用 `rclone move/copy` 推送到网盘
-
-示例（手动推送）：
+示例：
 
 ```bash
 sudo rclone move /srv/downloads openlist:/quark/downloads --progress --transfers 4 --checkers 8
 ```
 
-如果你明确要“容器直接写网盘目录”，也可以把目录以 `rw` 挂给写入容器，例如：
-
-```yaml
-qbittorrent:
-  volumes:
-    - /srv/cloud/quark:/downloads-cloud
-```
-
-然后在 qBittorrent 里把保存路径改成 `/downloads-cloud`。  
-同时建议保留 Jellyfin 对同目录 `:ro` 只读挂载。
+如果你坚持“容器直接写网盘”，可把 `/srv/cloud/<drive>` 以 `rw` 挂给目标容器。
 
 ---
 
-## 9. 故障排查（你日志里的两个典型错误）
+## 9. 常见故障
 
-### 9.1 OpenList: `Current user does not have write and/or execute permissions`
-
-处理：
+### 9.1 OpenList 启动失败：`/opt/openlist/data` 权限错误
 
 ```bash
-sudo mkdir -p /srv/docker/openlist
-sudo chown -R 1000:1000 /srv/docker/openlist
-sudo chmod -R u+rwX,g+rwX /srv/docker/openlist
+cd /srv/arkstack
+OPENLIST_DATA=$(awk -F= '/^OPENLIST_DATA=/{print $2}' .env)
+sudo mkdir -p "$OPENLIST_DATA"
+sudo chown -R 1000:1000 "$OPENLIST_DATA"
+sudo chmod -R u+rwX,g+rwX "$OPENLIST_DATA"
 sudo docker compose up -d --force-recreate openlist
 ```
 
@@ -396,18 +310,32 @@ sudo docker compose up -d --force-recreate openlist
 - ${OPENLIST_DATA}:/opt/openlist/data
 ```
 
-### 9.2 Watchtower: `client version 1.25 is too old`
+### 9.2 qBittorrent `Unauthorized`（反代场景）
 
-处理：
+项目已内置 `scripts/qbittorrent-init/10-reverse-proxy.sh`，容器启动时会自动写入兼容配置（关闭 HostHeader/CSRF 严格校验，开启反代支持）。
 
-- 保持 compose 中有：
+重建 qB：
+
+```bash
+sudo docker compose up -d --force-recreate qbittorrent
+```
+
+再查看临时密码并用无痕窗口登录：
+
+```bash
+sudo docker compose logs qbittorrent | rg -i "temporary password|administrator password"
+```
+
+### 9.3 Watchtower 报 Docker API 版本过旧
+
+本项目默认已加：
 
 ```yaml
 environment:
   - DOCKER_API_VERSION=1.44
 ```
 
-- 然后重建：
+若仍异常：
 
 ```bash
 sudo docker compose up -d --force-recreate watchtower
@@ -415,37 +343,22 @@ sudo docker compose up -d --force-recreate watchtower
 
 ---
 
-## 10. 重新部署（两种模式）
+## 10. 媒体服务选择（Jellyfin / Emby）
 
-### 10.1 保留数据重装（推荐）
+- Jellyfin：开源免费、无授权限制，适合你当前目标。
+- Emby：基础可用，高级能力通常需要 Premiere（付费）。
 
-```bash
-cd /srv/arkstack
-sudo docker compose down --remove-orphans
-sudo docker compose pull
-sudo docker compose up -d --build
-```
-
-### 10.2 全量清空重装（危险）
-
-```bash
-cd /srv/arkstack
-sudo docker compose down -v --remove-orphans
-# 确认你不需要旧数据后再执行
-sudo rm -rf /srv/docker/caddy /srv/docker/openlist /srv/docker/jellyfin /srv/docker/qbittorrent
-```
-
-然后回到“第 4 章 从零部署”。
+如果你未来要改成 Emby，最小改动是替换 `jellyfin` 服务镜像和端口，并保留现有挂载目录结构。
 
 ---
 
-## 11. 常用运维命令
+## 11. 运维命令
 
 ```bash
-# 查看状态
+# 状态
 sudo docker compose ps
 
-# 查看日志
+# 日志
 sudo docker compose logs -f caddy
 sudo docker compose logs -f openlist
 sudo docker compose logs -f jellyfin
@@ -455,20 +368,41 @@ sudo docker compose logs -f watchtower
 # 重启单服务
 sudo docker compose up -d --force-recreate openlist
 
-# 拉取并更新
+# 更新镜像
 sudo docker compose pull
 sudo docker compose up -d
 
-# 查看 Caddy 是否含 cloudflare dns 模块
+# 验证 Caddy cloudflare 模块
 sudo docker compose exec caddy caddy list-modules | rg cloudflare
 ```
 
 ---
 
-## 12. 安全建议
+## 12. 重新部署
 
-- `CF_DNS_API_TOKEN` 只给最小权限：`Zone.DNS:Edit` + `Zone:Read`
-- OpenList WebDAV 端口仅本地监听（当前已是 `127.0.0.1:25244`）
-- Jellyfin 对网盘目录建议 `:ro` 只读
-- 公网场景建议叠加 Fail2ban / CrowdSec / Cloudflare Access
-- qBittorrent 首次登录后立即修改管理员密码
+### 保留数据重装
+
+```bash
+cd /srv/arkstack
+sudo docker compose down --remove-orphans
+sudo docker compose pull
+sudo docker compose up -d --build
+```
+
+### 全量清空重装（危险）
+
+```bash
+cd /srv/arkstack
+sudo docker compose down -v --remove-orphans
+sudo rm -rf /srv/docker/caddy /srv/docker/openlist /srv/docker/jellyfin /srv/docker/qbittorrent
+```
+
+---
+
+## 13. 安全建议
+
+- `CF_DNS_API_TOKEN` 最小权限：`Zone.DNS:Edit` + `Zone:Read`
+- OpenList WebDAV 仅本地监听（`127.0.0.1:25244`）
+- 媒体库目录优先只读挂载（`:ro`）
+- 公网部署建议叠加 Fail2ban / CrowdSec / Cloudflare Access
+
