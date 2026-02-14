@@ -1,0 +1,23 @@
+name: arkos-portainer
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: arkos-portainer
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+    ports:
+      - "${PORTAINER_BIND_IP}:${PORTAINER_HTTPS_PORT}:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PORTAINER_DATA}:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    networks:
+      - media_net
+
+networks:
+  media_net:
+    external: true
+    name: ${ARK_NETWORK}

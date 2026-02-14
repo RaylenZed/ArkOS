@@ -6,6 +6,7 @@
 - Emby（媒体库/播放）
 - qBittorrent（下载）
 - Dify（AI 应用平台）
+- Portainer CE（Docker 可视化管理）
 - Caddy（统一 HTTPS 入口，Cloudflare DNS 证书）
 - Watchtower（自动更新）
 - rclone + systemd（把 OpenList 挂载到宿主机）
@@ -52,6 +53,10 @@
 │   ├── nginx/
 │   ├── ssrf_proxy/
 │   └── certbot/
+├── portainer/
+│   ├── docker-compose.yml
+│   ├── .env
+│   └── .env.example
 ├── watchtower/
 │   ├── docker-compose.yml
 │   ├── .env
@@ -68,7 +73,7 @@
 
 - Debian 12/13
 - Cloudflare 托管域名（例如 `pve.example.com`）
-- 放行你自定义端口（示例：48443/42053/42096/43053）
+- 放行你自定义端口（示例：48443/42053/42096/43053/49443）
 
 ---
 
@@ -108,6 +113,7 @@ cp openlist/.env.example openlist/.env
 cp emby/.env.example emby/.env
 cp qbittorrent/.env.example qbittorrent/.env
 cp dify/.env.example dify/.env
+cp portainer/.env.example portainer/.env
 cp watchtower/.env.example watchtower/.env
 ```
 
@@ -161,6 +167,13 @@ cp watchtower/.env.example watchtower/.env
 - `EXPOSE_NGINX_PORT` / `EXPOSE_NGINX_SSL_PORT`（建议仅 127.0.0.1 监听）
 - `ARK_NETWORK`（一致）
 
+### 5.7 `portainer/.env`
+
+- `PORTAINER_BIND_IP`（默认 `127.0.0.1`，如需局域网直连改为 `0.0.0.0`）
+- `PORTAINER_HTTPS_PORT`（默认 `49443`，建议先本地/内网访问）
+- `PORTAINER_DATA`
+- `ARK_NETWORK`（一致）
+
 ---
 
 ## 6. 初始化目录与权限
@@ -169,7 +182,7 @@ cp watchtower/.env.example watchtower/.env
 
 ```bash
 sudo mkdir -p \
-  /srv/docker/{caddy/data,caddy/config,openlist,emby/config,qbittorrent} \
+  /srv/docker/{caddy/data,caddy/config,openlist,emby/config,qbittorrent,portainer} \
   /srv/media/{local,incoming} \
   /srv/downloads \
   /srv/cloud \
@@ -206,6 +219,7 @@ sudo ./scripts/stack.sh ps
 - qBittorrent: `https://pve.example.com:42053`
 - OpenList: `https://pve.example.com:42096`
 - Dify: `https://pve.example.com:43053`
+- Portainer: `https://服务器IP:49443`（需 `PORTAINER_BIND_IP=0.0.0.0`）
 
 Cloudflare DNS：
 
@@ -246,6 +260,14 @@ sudo docker compose --env-file /srv/arkos/qbittorrent/.env -f /srv/arkos/qbittor
 1. 访问 `https://pve.example.com:43053`
 2. 注册首个管理员账号
 3. 进入设置配置模型供应商（OpenAI/火山/硅基流动等）
+
+### 8.5 Portainer
+
+1. 在 `portainer/.env` 设置 `PORTAINER_BIND_IP=0.0.0.0`（如需局域网直连）
+2. 执行 `sudo ./scripts/stack.sh restart portainer`
+3. 访问 `https://服务器IP:49443`
+4. 首次设置管理员密码
+5. 选择 `Local` 环境开始管理
 
 ---
 
@@ -362,9 +384,11 @@ sudo ./scripts/stack.sh logs openlist
 sudo ./scripts/stack.sh logs emby
 sudo ./scripts/stack.sh logs qbittorrent
 sudo ./scripts/stack.sh logs dify
+sudo ./scripts/stack.sh logs portainer
 
 # 单栈重启
 sudo ./scripts/stack.sh restart emby
+sudo ./scripts/stack.sh restart portainer
 ```
 
 ---

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STACKS=(gateway openlist emby qbittorrent dify watchtower)
+STACKS=(gateway openlist emby qbittorrent dify portainer watchtower)
 
 run_root() {
   if [[ "${EUID}" -eq 0 ]]; then
@@ -106,6 +106,12 @@ case "${SERVICE}" in
       exit 1
     fi
     ;;
+  portainer)
+    if [[ "${CONTAINER_PATH}" == "/data" || "${CONTAINER_PATH}" == /data/* ]]; then
+      echo "Container path ${CONTAINER_PATH} is reserved for Portainer."
+      exit 1
+    fi
+    ;;
 esac
 
 DEFAULT_MODE="rw"
@@ -132,7 +138,7 @@ if [[ -z "${UID_VALUE}" || -z "${GID_VALUE}" ]]; then
   GID_VALUE=1000
 fi
 
-if [[ "${SERVICE}" == "caddy" || "${SERVICE}" == "watchtower" ]]; then
+if [[ "${SERVICE}" == "caddy" || "${SERVICE}" == "watchtower" || "${SERVICE}" == "portainer" ]]; then
   UID_VALUE=0
   GID_VALUE=0
 fi

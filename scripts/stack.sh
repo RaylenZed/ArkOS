@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STACKS=(openlist emby qbittorrent dify gateway watchtower)
+STACKS=(openlist emby qbittorrent dify portainer gateway watchtower)
 
 run_root() {
   if [[ "${EUID}" -eq 0 ]]; then
@@ -138,7 +138,7 @@ case "${cmd}" in
   logs)
     if [[ "${target}" == "all" ]]; then
       echo "logs requires a specific stack"
-      echo "Usage: $0 logs <openlist|emby|qbittorrent|dify|gateway|watchtower>"
+      echo "Usage: $0 logs <openlist|emby|qbittorrent|dify|portainer|gateway|watchtower>"
       exit 1
     fi
     compose_cmd "${target}" logs -f
