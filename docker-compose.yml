@@ -12,11 +12,11 @@ services:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
       - BASE_DOMAIN=${BASE_DOMAIN}
       - ACME_EMAIL=${ACME_EMAIL}
-      - JELLYFIN_HTTPS_PORT=${JELLYFIN_HTTPS_PORT}
+      - EMBY_HTTPS_PORT=${EMBY_HTTPS_PORT}
       - QBIT_HTTPS_PORT=${QBIT_HTTPS_PORT}
       - OPENLIST_HTTPS_PORT=${OPENLIST_HTTPS_PORT}
     ports:
-      - "${JELLYFIN_HTTPS_PORT}:${JELLYFIN_HTTPS_PORT}"
+      - "${EMBY_HTTPS_PORT}:${EMBY_HTTPS_PORT}"
       - "${QBIT_HTTPS_PORT}:${QBIT_HTTPS_PORT}"
       - "${OPENLIST_HTTPS_PORT}:${OPENLIST_HTTPS_PORT}"
     volumes:
@@ -27,7 +27,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
     depends_on:
       - openlist
-      - jellyfin
+      - emby
       - qbittorrent
     networks:
       - media_net
@@ -49,15 +49,16 @@ services:
     networks:
       - media_net
 
-  jellyfin:
-    image: jellyfin/jellyfin:latest
-    container_name: arkmedia-jellyfin
+  emby:
+    image: emby/embyserver:latest
+    container_name: arkmedia-emby
     restart: unless-stopped
     environment:
       - TZ=${TZ}
+      - UID=${PUID}
+      - GID=${PGID}
     volumes:
-      - ${JELLYFIN_CONFIG}:/config
-      - ${JELLYFIN_CACHE}:/cache
+      - ${EMBY_CONFIG}:/config
       - ${MEDIA_LOCAL_PATH}:/media/local:ro
       - ${MEDIA_INCOMING_PATH}:/media/incoming
       - ${CLOUD_MOUNT_ROOT}:/media/cloud:ro

@@ -52,7 +52,7 @@ fi
 
 if [[ "${REMOVE_DATA}" == "y" || "${REMOVE_DATA}" == "Y" ]]; then
   echo "Step 3/4: removing data directories"
-  run_root rm -rf /srv/docker/caddy /srv/docker/openlist /srv/docker/jellyfin /srv/docker/qbittorrent
+  run_root rm -rf /srv/docker/caddy /srv/docker/openlist /srv/docker/emby /srv/docker/qbittorrent
   run_root rm -rf /srv/downloads /srv/media/incoming
   echo "Kept /srv/media/local, /srv/cloud, /vol1 by default."
 else

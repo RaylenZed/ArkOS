@@ -3,8 +3,8 @@
     acme_dns cloudflare {$CF_DNS_API_TOKEN}
 }
 
-{$BASE_DOMAIN}:{$JELLYFIN_HTTPS_PORT} {
-    reverse_proxy jellyfin:8096
+{$BASE_DOMAIN}:{$EMBY_HTTPS_PORT} {
+    reverse_proxy emby:8096
 }
 
 {$BASE_DOMAIN}:{$QBIT_HTTPS_PORT} {

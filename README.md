@@ -3,7 +3,7 @@
 基于 Debian 的家用媒体栈（Caddy 入口版）：
 
 - OpenList（网盘聚合）
-- Jellyfin（媒体库/播放）
+- Emby（媒体库/播放）
 - qBittorrent（下载）
 - Watchtower（自动更新）
 - Caddy + Cloudflare DNS-01（自动 HTTPS）
@@ -23,7 +23,7 @@
 
 默认访问地址：
 
-- Jellyfin: `https://pve.example.com:8443`
+- Emby: `https://pve.example.com:8443`
 - qBittorrent: `https://pve.example.com:2053`
 - OpenList: `https://pve.example.com:2096`
 
@@ -102,7 +102,7 @@ cp .env.example .env
 ### 4.4 手动初始化目录与权限
 
 ```bash
-sudo mkdir -p /srv/docker/{caddy/data,caddy/config,openlist,jellyfin/config,jellyfin/cache,qbittorrent} /srv/media/{local,incoming} /srv/downloads /srv/cloud /var/cache/rclone
+sudo mkdir -p /srv/docker/{caddy/data,caddy/config,openlist,emby/config,qbittorrent} /srv/media/{local,incoming} /srv/downloads /srv/cloud /var/cache/rclone
 sudo chown -R 1000:1000 /srv/docker/openlist /srv/docker/qbittorrent
 sudo chmod -R u+rwX,g+rwX /srv/docker/openlist /srv/docker/qbittorrent
 sudo chmod 755 /srv /srv/docker
@@ -126,10 +126,9 @@ sudo chmod 755 /srv /srv/docker
 sudo namei -l /srv/docker/openlist
 sudo docker run --rm -u 1000:1000 -v /srv/docker/openlist:/data alpine sh -c 'touch /data/.perm-check && ls -l /data/.perm-check'
 
-# Jellyfin
-sudo install -d -m 755 -o root -g root /srv/docker/jellyfin
-sudo install -d -m 775 -o 1000 -g 1000 /srv/docker/jellyfin/config
-sudo install -d -m 775 -o 1000 -g 1000 /srv/docker/jellyfin/cache
+# Emby
+sudo install -d -m 755 -o root -g root /srv/docker/emby
+sudo install -d -m 775 -o 1000 -g 1000 /srv/docker/emby/config
 
 # qBittorrent
 sudo install -d -m 775 -o 1000 -g 1000 /srv/docker/qbittorrent
@@ -172,7 +171,7 @@ sudo docker compose ps
 - 创建管理员账号
 - 添加网盘（夸克/阿里盘/OneDrive 等）
 
-### 6.2 Jellyfin
+### 6.2 Emby
 
 - 打开 `https://pve.example.com:8443`
 - 创建管理员
@@ -272,7 +271,7 @@ sudo mount -a
 df -h | grep /mnt/ssd
 ```
 
-### 8.2 Jellyfin 同时扫描多个来源
+### 8.2 Emby 同时扫描多个来源
 
 可在同一个库里加入多个路径：
 
@@ -280,16 +279,16 @@ df -h | grep /mnt/ssd
 - `/media/cloud/quark/TV`
 - `/media/ssd/TV`
 
-如果要增加 SSD 映射，在 `jellyfin.volumes` 追加：
+如果要增加 SSD 映射，在 `emby.volumes` 追加：
 
 ```yaml
 - /mnt/ssd/media:/media/ssd:ro
 ```
 
-然后重启 Jellyfin：
+然后重启 Emby：
 
 ```bash
-sudo docker compose up -d jellyfin
+sudo docker compose up -d emby
 ```
 
 ### 8.3 同目录给多个容器
@@ -301,7 +300,7 @@ qbittorrent:
   volumes:
     - /srv/media/incoming:/media/incoming
 
-jellyfin:
+emby:
   volumes:
     - /srv/media/incoming:/media/incoming:ro
 ```
@@ -498,12 +497,11 @@ sudo ./scripts/reset-stack.sh
 
 ---
 
-## 12. 媒体服务选择（Jellyfin / Emby）
+## 12. 媒体服务选择（默认 Emby）
 
-- Jellyfin：开源免费、无授权限制，适合你当前目标。
-- Emby：基础可用，高级能力通常需要 Premiere（付费）。
-
-如果你未来要改成 Emby，最小改动是替换 `jellyfin` 服务镜像和端口，并保留现有挂载目录结构。
+- 当前仓库默认媒体服务是 Emby（`emby/embyserver`）。
+- Emby 日常可用，但部分高级能力需要 Emby Premiere（付费）。
+- 如果你希望全开源免费路线，可改回 Jellyfin（替换镜像、服务名和 Caddy 上游即可）。
 
 ---
 
@@ -516,7 +514,7 @@ sudo docker compose ps
 # 日志
 sudo docker compose logs -f caddy
 sudo docker compose logs -f openlist
-sudo docker compose logs -f jellyfin
+sudo docker compose logs -f emby
 sudo docker compose logs -f qbittorrent
 sudo docker compose logs -f watchtower
 
@@ -549,7 +547,7 @@ sudo docker compose up -d --build
 ```bash
 cd /srv/arkstack
 sudo docker compose down -v --remove-orphans
-sudo rm -rf /srv/docker/caddy /srv/docker/openlist /srv/docker/jellyfin /srv/docker/qbittorrent
+sudo rm -rf /srv/docker/caddy /srv/docker/openlist /srv/docker/emby /srv/docker/qbittorrent
 ```
 
 ---

@@ -85,9 +85,9 @@ case "${SERVICE}" in
       exit 1
     fi
     ;;
-  jellyfin)
-    if [[ "${CONTAINER_PATH}" == "/config" || "${CONTAINER_PATH}" == "/cache" ]]; then
-      echo "Container path ${CONTAINER_PATH} is reserved for Jellyfin."
+  emby)
+    if [[ "${CONTAINER_PATH}" == "/config" ]]; then
+      echo "Container path ${CONTAINER_PATH} is reserved for Emby."
       exit 1
     fi
     ;;
@@ -106,7 +106,7 @@ case "${SERVICE}" in
 esac
 
 DEFAULT_MODE="rw"
-if [[ "${SERVICE}" == "jellyfin" || "${SERVICE}" == "caddy" ]]; then
+if [[ "${SERVICE}" == "emby" || "${SERVICE}" == "caddy" ]]; then
   DEFAULT_MODE="ro"
 fi
 read -r -p "Mount mode [rw/ro] (default: ${DEFAULT_MODE}): " MODE
