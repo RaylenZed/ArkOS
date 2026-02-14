@@ -121,6 +121,7 @@ cp watchtower/.env.example watchtower/.env
 - `ACME_EMAIL`
 - `CF_DNS_API_TOKEN`
 - `EMBY_HTTPS_PORT` / `QBIT_HTTPS_PORT` / `OPENLIST_HTTPS_PORT` / `DIFY_HTTPS_PORT`
+- `DIFY_UPSTREAM`（可选，默认 `nginx:80`，用于 Dify 反代上游，升级时若服务名变化可只改这里）
 - `ARK_NETWORK`
 
 ### 5.2 `openlist/.env`
