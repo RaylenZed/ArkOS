@@ -1,9 +1,9 @@
-name: arkmedia-emby
+name: arkos-emby
 
 services:
   emby:
     image: emby/embyserver:latest
-    container_name: arkmedia-emby
+    container_name: arkos-emby
     restart: unless-stopped
     environment:
       - TZ=${TZ}

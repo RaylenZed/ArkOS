@@ -27,11 +27,11 @@ env_file_for_stack() {
   echo ""
 }
 
-echo "This will stop and remove all ArkMedia stack containers and networks."
+echo "This will stop and remove all ArkOS stack containers and networks."
 echo "Optional steps can also remove images and data directories."
 echo
-read -r -p "Type RESET-ARKMEDIA to continue: " CONFIRM
-if [[ "${CONFIRM}" != "RESET-ARKMEDIA" ]]; then
+read -r -p "Type RESET-ARKOS to continue: " CONFIRM
+if [[ "${CONFIRM}" != "RESET-ARKOS" ]]; then
   echo "Cancelled."
   exit 1
 fi
@@ -63,10 +63,10 @@ for s in "${STACKS[@]}"; do
 done
 
 GATEWAY_ENV="$(env_file_for_stack gateway)"
-ARK_NETWORK="arkmedia-net"
+ARK_NETWORK="arkos-net"
 if [[ -n "${GATEWAY_ENV}" ]]; then
   ARK_NETWORK="$(awk -F= '/^ARK_NETWORK=/{print $2}' "${GATEWAY_ENV}")"
-  ARK_NETWORK="${ARK_NETWORK:-arkmedia-net}"
+  ARK_NETWORK="${ARK_NETWORK:-arkos-net}"
 fi
 run_root docker network rm "${ARK_NETWORK}" >/dev/null 2>&1 || true
 
@@ -81,7 +81,7 @@ if [[ "${REMOVE_IMAGES}" == "y" || "${REMOVE_IMAGES}" == "Y" ]]; then
       run_root docker compose --env-file "${env_file}" -f "${compose_file}" config 2>/dev/null | awk '/image:/ {print $2}'
     done | sort -u
   )
-  SERVICE_IMAGES+=("arkmedia-gateway-caddy:latest")
+  SERVICE_IMAGES+=("arkos-gateway-caddy:latest")
   for img in "${SERVICE_IMAGES[@]}"; do
     run_root docker image rm -f "${img}" >/dev/null 2>&1 || true
   done

@@ -1,11 +1,11 @@
-name: arkmedia-gateway
+name: arkos-gateway
 
 services:
   caddy:
     build:
       context: .
       dockerfile: Dockerfile.caddy
-    container_name: arkmedia-caddy
+    container_name: arkos-caddy
     restart: unless-stopped
     environment:
       - TZ=${TZ}

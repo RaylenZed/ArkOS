@@ -1,9 +1,9 @@
-name: arkmedia-openlist
+name: arkos-openlist
 
 services:
   openlist:
     image: openlistteam/openlist:latest
-    container_name: arkmedia-openlist
+    container_name: arkos-openlist
     restart: unless-stopped
     user: "${OPENLIST_UID}:${OPENLIST_GID}"
     environment:

@@ -1,9 +1,9 @@
-name: arkmedia-qbittorrent
+name: arkos-qbittorrent
 
 services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: arkmedia-qbittorrent
+    container_name: arkos-qbittorrent
     restart: unless-stopped
     environment:
       - TZ=${TZ}

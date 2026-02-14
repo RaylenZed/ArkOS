@@ -15,6 +15,7 @@
 - 不依赖 80/443/8080
 - 单域名 + 多端口访问
 - 每个服务独立目录、独立 `docker-compose.yml`、独立 `.env`
+- 命名统一使用 `arkos` 前缀（例如 `arkos-net`、`arkos-*` 容器名）
 
 ---
 
@@ -67,7 +68,7 @@
 
 - Debian 12/13
 - Cloudflare 托管域名（例如 `pve.example.com`）
-- 放行你自定义端口（示例：8443/2053/2096/3053）
+- 放行你自定义端口（示例：48443/42053/42096/43053）
 
 ---
 
@@ -200,10 +201,10 @@ sudo ./scripts/stack.sh ps
 
 假设 `BASE_DOMAIN=pve.example.com`：
 
-- Emby: `https://pve.example.com:8443`
-- qBittorrent: `https://pve.example.com:2053`
-- OpenList: `https://pve.example.com:2096`
-- Dify: `https://pve.example.com:3053`
+- Emby: `https://pve.example.com:48443`
+- qBittorrent: `https://pve.example.com:42053`
+- OpenList: `https://pve.example.com:42096`
+- Dify: `https://pve.example.com:43053`
 
 Cloudflare DNS：
 
@@ -216,13 +217,13 @@ Cloudflare DNS：
 
 ### 8.1 OpenList
 
-1. 访问 `https://pve.example.com:2096`
+1. 访问 `https://pve.example.com:42096`
 2. 创建管理员
 3. 添加网盘（夸克/阿里云盘/OneDrive）
 
 ### 8.2 Emby
 
-1. 访问 `https://pve.example.com:8443`
+1. 访问 `https://pve.example.com:48443`
 2. 创建管理员
 3. 添加媒体库路径（多路径可共存）：
 - `/media/local/TV`
@@ -231,7 +232,7 @@ Cloudflare DNS：
 
 ### 8.3 qBittorrent
 
-1. 访问 `https://pve.example.com:2053`
+1. 访问 `https://pve.example.com:42053`
 2. 用户名 `admin`
 3. 查看临时密码：
 
@@ -241,7 +242,7 @@ sudo docker compose --env-file /srv/arkos/qbittorrent/.env -f /srv/arkos/qbittor
 
 ### 8.4 Dify
 
-1. 访问 `https://pve.example.com:3053`
+1. 访问 `https://pve.example.com:43053`
 2. 注册首个管理员账号
 3. 进入设置配置模型供应商（OpenAI/火山/硅基流动等）
 
@@ -260,7 +261,7 @@ sudo rclone config
 
 - `name = openlist`
 - `type = webdav`
-- `url = http://127.0.0.1:25244/dav`（如你改了 `openlist/.env` 的 `OPENLIST_LOCAL_PORT`，这里同步改）
+- `url = http://127.0.0.1:45244/dav`（如你改了 `openlist/.env` 的 `OPENLIST_LOCAL_PORT`，这里同步改）
 - `vendor = other`
 - `user/pass = OpenList WebDAV 账号`
 

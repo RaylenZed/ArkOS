@@ -4,7 +4,7 @@
 # or docker-compose-template.yaml and regenerate this file.
 # ==================================================================
 
-name: arkmedia-dify
+name: arkos-dify
 
 x-shared-env: &shared-api-worker-env
   CONSOLE_API_URL: ${CONSOLE_API_URL:-}
@@ -1086,7 +1086,7 @@ services:
   # used for reverse proxying the API service and Web service.
   nginx:
     image: nginx:latest
-    container_name: arkmedia-dify-nginx
+    container_name: arkos-dify-nginx
     restart: always
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template

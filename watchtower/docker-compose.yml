@@ -1,9 +1,9 @@
-name: arkmedia-watchtower
+name: arkos-watchtower
 
 services:
   watchtower:
     image: containrrr/watchtower:latest
-    container_name: arkmedia-watchtower
+    container_name: arkos-watchtower
     restart: unless-stopped
     command:
       - --label-enable

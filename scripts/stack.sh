@@ -35,10 +35,10 @@ require_stack_env() {
 
 get_network_name() {
   local gateway_env="${ROOT_DIR}/gateway/.env"
-  local network_name="arkmedia-net"
+  local network_name="arkos-net"
   if [[ -f "${gateway_env}" ]]; then
     network_name="$(awk -F= '/^ARK_NETWORK=/{print $2}' "${gateway_env}")"
-    network_name="${network_name:-arkmedia-net}"
+    network_name="${network_name:-arkos-net}"
   fi
   echo "${network_name}"
 }
