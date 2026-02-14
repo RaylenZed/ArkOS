@@ -23,3 +23,11 @@
 {$BASE_DOMAIN}:{$DIFY_HTTPS_PORT} {
     reverse_proxy {$DIFY_UPSTREAM}
 }
+
+{$BASE_DOMAIN}:{$PORTAINER_HTTPS_PORT} {
+    reverse_proxy {$PORTAINER_UPSTREAM} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}

@@ -126,8 +126,9 @@ cp watchtower/.env.example watchtower/.env
 - `BASE_DOMAIN`
 - `ACME_EMAIL`
 - `CF_DNS_API_TOKEN`
-- `EMBY_HTTPS_PORT` / `QBIT_HTTPS_PORT` / `OPENLIST_HTTPS_PORT` / `DIFY_HTTPS_PORT`
+- `EMBY_HTTPS_PORT` / `QBIT_HTTPS_PORT` / `OPENLIST_HTTPS_PORT` / `DIFY_HTTPS_PORT` / `PORTAINER_HTTPS_PORT`
 - `DIFY_UPSTREAM`（可选，默认 `nginx:80`，用于 Dify 反代上游，升级时若服务名变化可只改这里）
+- `PORTAINER_UPSTREAM`（可选，默认 `portainer:9443`，用于 Portainer 反代上游）
 - `ARK_NETWORK`
 
 ### 5.2 `openlist/.env`
@@ -169,8 +170,8 @@ cp watchtower/.env.example watchtower/.env
 
 ### 5.7 `portainer/.env`
 
-- `PORTAINER_BIND_IP`（默认 `127.0.0.1`，如需局域网直连改为 `0.0.0.0`）
-- `PORTAINER_HTTPS_PORT`（默认 `49443`，建议先本地/内网访问）
+- `PORTAINER_BIND_IP`（默认 `127.0.0.1`；走 gateway 反代可保持默认）
+- `PORTAINER_LOCAL_HTTPS_PORT`（默认 `49444`；仅本机/内网直连 Portainer 时使用）
 - `PORTAINER_DATA`
 - `ARK_NETWORK`（一致）
 
@@ -219,7 +220,7 @@ sudo ./scripts/stack.sh ps
 - qBittorrent: `https://pve.example.com:42053`
 - OpenList: `https://pve.example.com:42096`
 - Dify: `https://pve.example.com:43053`
-- Portainer: `https://服务器IP:49443`（需 `PORTAINER_BIND_IP=0.0.0.0`）
+- Portainer: `https://pve.example.com:49443`（通过 gateway 反代）
 
 Cloudflare DNS：
 
@@ -263,11 +264,13 @@ sudo docker compose --env-file /srv/arkos/qbittorrent/.env -f /srv/arkos/qbittor
 
 ### 8.5 Portainer
 
-1. 在 `portainer/.env` 设置 `PORTAINER_BIND_IP=0.0.0.0`（如需局域网直连）
+1. 确保 `gateway/.env` 包含：
+   `PORTAINER_HTTPS_PORT=49443` 与 `PORTAINER_UPSTREAM=portainer:9443`
 2. 执行 `sudo ./scripts/stack.sh restart portainer`
-3. 访问 `https://服务器IP:49443`
-4. 首次设置管理员密码
-5. 选择 `Local` 环境开始管理
+3. 执行 `sudo ./scripts/stack.sh restart gateway`
+4. 访问 `https://pve.example.com:49443`
+5. 首次设置管理员密码
+6. 选择 `Local` 环境开始管理
 
 ---
 

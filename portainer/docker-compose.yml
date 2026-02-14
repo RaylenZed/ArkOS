@@ -8,7 +8,7 @@ services:
     environment:
       - TZ=${TZ}
     ports:
-      - "${PORTAINER_BIND_IP}:${PORTAINER_HTTPS_PORT}:9443"
+      - "${PORTAINER_BIND_IP}:${PORTAINER_LOCAL_HTTPS_PORT:-49444}:9443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PORTAINER_DATA}:/data
