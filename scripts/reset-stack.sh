@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ROOT_DIR}/.env"
 STACKS=(gateway openlist emby qbittorrent watchtower)
 
 run_root() {
@@ -13,10 +12,20 @@ run_root() {
   fi
 }
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Missing ${ENV_FILE}. Run: cp .env.example .env"
-  exit 1
-fi
+env_file_for_stack() {
+  local stack="$1"
+  local env_file="${ROOT_DIR}/${stack}/.env"
+  local env_example="${ROOT_DIR}/${stack}/.env.example"
+  if [[ -f "${env_file}" ]]; then
+    echo "${env_file}"
+    return
+  fi
+  if [[ -f "${env_example}" ]]; then
+    echo "${env_example}"
+    return
+  fi
+  echo ""
+}
 
 echo "This will stop and remove all ArkMedia stack containers and networks."
 echo "Optional steps can also remove images and data directories."
@@ -41,16 +50,24 @@ echo "Step 1/4: stopping stacks"
 for s in "${STACKS[@]}"; do
   compose_file="${ROOT_DIR}/${s}/docker-compose.yml"
   override_file="${ROOT_DIR}/${s}/docker-compose.override.yml"
-  if [[ -f "${compose_file}" ]]; then
-    if [[ -f "${override_file}" ]]; then
-      run_root docker compose --env-file "${ENV_FILE}" -f "${compose_file}" -f "${override_file}" down -v --remove-orphans || true
-    else
-      run_root docker compose --env-file "${ENV_FILE}" -f "${compose_file}" down -v --remove-orphans || true
-    fi
+  env_file="$(env_file_for_stack "${s}")"
+
+  [[ -f "${compose_file}" ]] || continue
+  [[ -n "${env_file}" ]] || continue
+
+  if [[ -f "${override_file}" ]]; then
+    run_root docker compose --env-file "${env_file}" -f "${compose_file}" -f "${override_file}" down -v --remove-orphans || true
+  else
+    run_root docker compose --env-file "${env_file}" -f "${compose_file}" down -v --remove-orphans || true
   fi
 done
-ARK_NETWORK="$(awk -F= '/^ARK_NETWORK=/{print $2}' "${ENV_FILE}")"
-ARK_NETWORK="${ARK_NETWORK:-arkmedia-net}"
+
+GATEWAY_ENV="$(env_file_for_stack gateway)"
+ARK_NETWORK="arkmedia-net"
+if [[ -n "${GATEWAY_ENV}" ]]; then
+  ARK_NETWORK="$(awk -F= '/^ARK_NETWORK=/{print $2}' "${GATEWAY_ENV}")"
+  ARK_NETWORK="${ARK_NETWORK:-arkmedia-net}"
+fi
 run_root docker network rm "${ARK_NETWORK}" >/dev/null 2>&1 || true
 
 if [[ "${REMOVE_IMAGES}" == "y" || "${REMOVE_IMAGES}" == "Y" ]]; then
@@ -58,8 +75,10 @@ if [[ "${REMOVE_IMAGES}" == "y" || "${REMOVE_IMAGES}" == "Y" ]]; then
   mapfile -t SERVICE_IMAGES < <(
     for s in "${STACKS[@]}"; do
       compose_file="${ROOT_DIR}/${s}/docker-compose.yml"
+      env_file="$(env_file_for_stack "${s}")"
       [[ -f "${compose_file}" ]] || continue
-      run_root docker compose --env-file "${ENV_FILE}" -f "${compose_file}" config 2>/dev/null | awk '/image:/ {print $2}'
+      [[ -n "${env_file}" ]] || continue
+      run_root docker compose --env-file "${env_file}" -f "${compose_file}" config 2>/dev/null | awk '/image:/ {print $2}'
     done | sort -u
   )
   SERVICE_IMAGES+=("arkmedia-gateway-caddy:latest")
@@ -94,6 +113,9 @@ done
 echo
 echo "Reset completed."
 echo "Next:"
-echo "  cp .env.example .env"
-echo "  edit .env"
+echo "  cp gateway/.env.example gateway/.env"
+echo "  cp openlist/.env.example openlist/.env"
+echo "  cp emby/.env.example emby/.env"
+echo "  cp qbittorrent/.env.example qbittorrent/.env"
+echo "  cp watchtower/.env.example watchtower/.env"
 echo "  sudo ./scripts/stack.sh up"

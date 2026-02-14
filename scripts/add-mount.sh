@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ROOT_DIR}/.env"
 STACKS=(gateway openlist emby qbittorrent watchtower)
 
 run_root() {
@@ -13,10 +12,21 @@ run_root() {
   fi
 }
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Missing ${ENV_FILE}. Run: cp .env.example .env"
-  exit 1
-fi
+env_file_for_stack() {
+  local stack="$1"
+  local env_file="${ROOT_DIR}/${stack}/.env"
+  if [[ -f "${env_file}" ]]; then
+    echo "${env_file}"
+    return
+  fi
+  echo ""
+}
+
+pick_env_value() {
+  local env_file="$1"
+  local key="$2"
+  awk -F= -v key="${key}" '$1==key {print substr($0, index($0,"=")+1); exit}' "${env_file}"
+}
 
 echo "Available stacks:"
 for i in "${!STACKS[@]}"; do
@@ -29,6 +39,13 @@ if ! [[ "${STACK_PICK}" =~ ^[0-9]+$ ]] || (( STACK_PICK < 1 || STACK_PICK > ${#S
   exit 1
 fi
 STACK="${STACKS[STACK_PICK-1]}"
+ENV_FILE="$(env_file_for_stack "${STACK}")"
+if [[ -z "${ENV_FILE}" ]]; then
+  echo "Missing ${ROOT_DIR}/${STACK}/.env"
+  echo "Run: cp ${ROOT_DIR}/${STACK}/.env.example ${ROOT_DIR}/${STACK}/.env"
+  exit 1
+fi
+
 COMPOSE_FILE="${ROOT_DIR}/${STACK}/docker-compose.yml"
 OVERRIDE_FILE="${ROOT_DIR}/${STACK}/docker-compose.override.yml"
 STATE_FILE="${ROOT_DIR}/${STACK}/.mounts.state"
@@ -102,13 +119,26 @@ if [[ "${MODE}" != "rw" && "${MODE}" != "ro" ]]; then
   exit 1
 fi
 
-PUID_VALUE="$(awk -F= '/^PUID=/{print $2}' "${ENV_FILE}")"
-PGID_VALUE="$(awk -F= '/^PGID=/{print $2}' "${ENV_FILE}")"
-PUID_VALUE="${PUID_VALUE:-1000}"
-PGID_VALUE="${PGID_VALUE:-1000}"
+UID_VALUE="$(pick_env_value "${ENV_FILE}" PUID)"
+GID_VALUE="$(pick_env_value "${ENV_FILE}" PGID)"
+
+if [[ "${SERVICE}" == "openlist" ]]; then
+  UID_VALUE="$(pick_env_value "${ENV_FILE}" OPENLIST_UID)"
+  GID_VALUE="$(pick_env_value "${ENV_FILE}" OPENLIST_GID)"
+fi
+
+if [[ -z "${UID_VALUE}" || -z "${GID_VALUE}" ]]; then
+  UID_VALUE=1000
+  GID_VALUE=1000
+fi
+
+if [[ "${SERVICE}" == "caddy" || "${SERVICE}" == "watchtower" ]]; then
+  UID_VALUE=0
+  GID_VALUE=0
+fi
 
 run_root mkdir -p "${HOST_PATH}"
-run_root chown "${PUID_VALUE}:${PGID_VALUE}" "${HOST_PATH}"
+run_root chown "${UID_VALUE}:${GID_VALUE}" "${HOST_PATH}"
 if [[ "${MODE}" == "rw" ]]; then
   run_root chmod 775 "${HOST_PATH}"
 else
