@@ -391,6 +391,63 @@ sudo ./scripts/stack.sh restart emby
 sudo ./scripts/stack.sh restart portainer
 ```
 
+### 11.1 新增容器反代（模板）
+
+1. 新服务加入共享网络（`<newstack>/docker-compose.yml`）：
+
+```yaml
+services:
+  <service_name>:
+    networks:
+      - media_net
+
+networks:
+  media_net:
+    external: true
+    name: ${ARK_NETWORK}
+```
+
+2. 在 `<newstack>/.env` 确认：
+
+```bash
+ARK_NETWORK=arkos-net
+```
+
+3. 在 `gateway/.env` 新增对外端口（示例）：
+
+```bash
+JELLYFIN_HTTPS_PORT=44100
+```
+
+4. 在 `gateway/docker-compose.yml` 给 caddy 增加环境变量和端口映射：
+
+```yaml
+services:
+  caddy:
+    environment:
+      - JELLYFIN_HTTPS_PORT=${JELLYFIN_HTTPS_PORT}
+    ports:
+      - "${JELLYFIN_HTTPS_PORT}:${JELLYFIN_HTTPS_PORT}"
+```
+
+5. 在 `gateway/Caddyfile` 增加反代（示例）：
+
+```caddy
+{$BASE_DOMAIN}:{$JELLYFIN_HTTPS_PORT} {
+    reverse_proxy jellyfin:8096
+}
+```
+
+6. 重启并验证：
+
+```bash
+cd /srv/arkos
+sudo ./scripts/stack.sh restart <newstack>
+sudo ./scripts/stack.sh restart gateway
+sudo docker network inspect arkos-net --format '{{range .Containers}}{{println .Name}}{{end}}'
+sudo docker logs --tail=80 arkos-caddy
+```
+
 ---
 
 ## 12. 交互脚本
